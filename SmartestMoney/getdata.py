@@ -2,6 +2,11 @@ import requests
 import json
 from sqlalchemy import create_engine, Column, Integer, Float, String, Boolean, UniqueConstraint
 from sqlalchemy.orm import declarative_base, sessionmaker
+import time
+
+# 可参考项目
+# https://github.com/tpmmthomas/binance-copy-trade-bot/blob/14133d86434271aae20a1a06b9e926350c33213e/Binance/bparser.py
+# https://github.com/DogeIII/Binance-Leaderboard-CopyTrading/blob/main/bot.py
 
 Base = declarative_base()
 engine = create_engine('sqlite:///SmartestMoney.db')
@@ -35,9 +40,17 @@ def retrieve_positions(tradeType):
             'X-RapidAPI-Host': 'binance-futures-leaderboard1.p.rapidapi.com'
         }
         response = requests.get(url, headers=headers, params=querystring)
-        return response.json()['data']['otherPositionRetList']
+        if response.status_code == 200:
+            data = response.json().get('data', {})
+            if data.get('otherPositionRetList') is None:
+                return []
+            else:
+                return data['otherPositionRetList']
+        else:
+            return []
     except Exception as e:
         print('Error retrieving positions', e)   
+        return []
 
 def get_latest_updateTimeStamp(symbol):
     session = Session()
@@ -53,13 +66,17 @@ def get_latest_updateTimeStamp(symbol):
 def get_all_symbols_and_latest_timestamps():
     session = Session()
     try:
-        # 获取所有symbol及其最新updateTimeStamp
-        symbols_timestamps = session.query(
+        all_positions = session.query(
             Position.symbol, 
             Position.updateTimeStamp
-        ).distinct(Position.symbol).group_by(Position.symbol).all()
+        ).order_by(Position.symbol, Position.updateTimeStamp.desc()).all()
         
-        return {symbol: timestamp for symbol, timestamp in symbols_timestamps}
+        symbols_timestamps = {}
+        for symbol, timestamp in all_positions:
+            if symbol not in symbols_timestamps:
+                symbols_timestamps[symbol] = timestamp
+
+        return symbols_timestamps
     finally:
         session.close()
 
@@ -206,5 +223,9 @@ def update_trade():
 
 init_db()
 initial_insert_positions()
-update_trade()
+while True:
+    update_trade()
+    time.sleep(7200)
+
+
 
