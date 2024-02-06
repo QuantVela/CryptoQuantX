@@ -30,7 +30,7 @@ def select_top_n(row):
         return row['rank'] <= row['coin_count'] * 0.2
     else:
         # 如果币种数量大于30，选择前30个
-        return row['rank'] <= 30
+        return row['rank'] <= 33
     
 def pair_filter(data_folder, start_date, end_date):
     all_data = []
@@ -174,17 +174,25 @@ def update_capital_and_exit(date, coin_pair, exit_price, exit_size):
     exits.at[date, coin_pair] = True
     size.at[date, coin_pair] = -exit_size
     # print(coin_pair, "exit size",exit_size)
+    
     capital_gain = exit_price * exit_size * (1 - fees)
+    # total_sum_for_coin_pair = sum(trade['entry_price'] * trade['size'] for trade in holdings[coin_pair]['trades'])
+    # profit = capital_gain - total_sum_for_coin_pair
+    # print("该笔收益",date, coin_pair, profit)
+
     capital_df.at[date, 'Remaining Cash'] += capital_gain
-    print(coin_pair,"Remaining Cash",capital_df.at[date, 'Remaining Cash'])
+    # print(coin_pair,"Remaining Cash",capital_df.at[date, 'Remaining Cash'])
     capital_df.at[date, 'Available Cash'] = capital_df.at[date, 'Remaining Cash'] * 0.99
     del holdings[coin_pair]
+
     asset_value_sum = sum(
         trade['entry_price'] * trade['size'] for coin in holdings for trade in holdings[coin]['trades']
     ) 
+    # print("sum", asset_value_sum)
+
     capital_df.at[date, 'Asset Value'] = capital_df.at[date, 'Remaining Cash'] + asset_value_sum   
     exited_coins.add(coin_pair)
-    print("Coins in holdings:", list(holdings.keys()))
+    # print("Coins in holdings:", list(holdings.keys()))
 
 def update_capital_and_entry(date, coin_pair, current_price, stake_amount, update_holdings=True):
     available_cash = capital_df.at[date, 'Available Cash']
@@ -213,6 +221,7 @@ def update_capital_and_entry(date, coin_pair, current_price, stake_amount, updat
         trade['entry_price'] * trade['size'] for coin in holdings for trade in holdings[coin]['trades']
     )
     capital_df.at[date, 'Asset Value'] = asset_value
+    return True
 
 for date, signals_on_date in mask.iterrows():  # 遍历 mask 中的每个日期
 
@@ -240,7 +249,8 @@ for date, signals_on_date in mask.iterrows():  # 遍历 mask 中的每个日期
         atr_value = atr.loc[date, (atr_window, coin_pair)]
         last_entry_price = holdings[coin_pair]['trades'][-1]['entry_price']
 
-        if current_price <= 0.5 * entry_price or exit_mask.at[date, coin_pair]:
+        # if current_price <= 0.5 * entry_price or exit_mask.at[date, coin_pair]:
+        if exit_mask.at[date, coin_pair]:
             update_capital_and_exit(date, coin_pair, current_price, exit_size)
             print(coin_pair, "update exit size cas stoploss or exit trend ",capital_df.loc[date])
             continue
@@ -248,8 +258,9 @@ for date, signals_on_date in mask.iterrows():  # 遍历 mask 中的每个日期
         if (current_price >= last_entry_price + 0.5 * atr_value) and (1 <= len(holdings[coin_pair]['trades']) <= 3): #加仓最多3次
             first_trade = holdings[coin_pair]['trades'][0]
             stake_amount = first_trade['entry_price'] * first_trade['size']
-            update_capital_and_entry(date, coin_pair, current_price, stake_amount, update_holdings=True)
-            print(coin_pair, "adjustment entry size",capital_df.loc[date])
+            result = update_capital_and_entry(date, coin_pair, current_price, stake_amount, update_holdings=True)
+            if result:
+                print(coin_pair, "adjustment entry size",capital_df.loc[date])
 
     signals = signals_on_date[signals_on_date].index.tolist()  # 检查当前日期有哪些币对发出了入场信号
     if not signals or len(holdings) >= 10:
@@ -265,11 +276,13 @@ for date, signals_on_date in mask.iterrows():  # 遍历 mask 中的每个日期
             entry_price = close.at[date, coin_pair]
             atr_value = atr.loc[date, (atr_window, coin_pair)]
             stake_amount = asset_value * risk_factor * entry_price / (atr_value * position_count)
-            print(coin_pair,"stake amount",stake_amount,"asset",asset_value, "price",entry_price)
-            update_capital_and_entry(date, coin_pair, entry_price, stake_amount, update_holdings=False)
-            print(coin_pair, "update entry size",capital_df.loc[date])
+            # print(coin_pair,"stake amount",stake_amount,"asset",asset_value, "price",entry_price)
+            result = update_capital_and_entry(date, coin_pair, entry_price, stake_amount, update_holdings=False)
+            if result:
+                print(coin_pair, "update entry size",capital_df.loc[date])
             # print(json.dumps(holdings, indent=4, cls=CustomEncoder))
 exits = exits.fillna(False)
+capital_df.to_csv('capital_data.csv', index=True)
 
 pf = vbt.Portfolio.from_orders(
     close=close, 
@@ -316,7 +329,7 @@ def gen_tradelog(csv_path):
                     '首次买入价格': row['Price'],
                     '首次买入数量': row['Size']
                 }
-            elif buy_counter <= 2:
+            else:
                 trade[f'加仓{buy_counter}买入价格'] = row['Price']
                 trade[f'加仓{buy_counter}买入数量'] = row['Size']
             accumulated_fees += row['Fees'] 
@@ -327,7 +340,7 @@ def gen_tradelog(csv_path):
             trade['卖出价格'] = row['Price']
             trade['卖出数量'] = row['Size']
             trade['USDT Value'] = trade.get('首次买入价格', 0) * trade.get('首次买入数量', 0)
-            trade['USDT Value'] += sum([trade.get(f'加仓{i}买入价格', 0) * trade.get(f'加仓{i}买入数量', 0) for i in range(1, 3)])  
+            trade['USDT Value'] += sum([trade.get(f'加仓{i}买入价格', 0) * trade.get(f'加仓{i}买入数量', 0) for i in range(1, buy_counter)])  
             accumulated_fees += row['Fees']
             trade['Fees'] = accumulated_fees
             trades.append(trade)
@@ -337,7 +350,7 @@ def gen_tradelog(csv_path):
 
     columns_order = [
         '交易币对', '首次买入时间', '首次买入价格', '首次买入数量',
-        '加仓1买入价格', '加仓1买入数量', '加仓2买入价格', '加仓2买入数量',
+        '加仓1买入价格', '加仓1买入数量', '加仓2买入价格', '加仓2买入数量','加仓3买入价格', '加仓3买入数量',
         '卖出时间', '卖出价格', '卖出数量', 'USDT Value', 'Fees'
     ]
 
