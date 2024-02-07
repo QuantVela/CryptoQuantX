@@ -26,11 +26,10 @@ class CustomEncoder(JSONEncoder):
 
 def select_top_n(row):
     if row['date'] <= change_date:
-        # 如果币种数量小于等于30，选择前20%
+        # 币种数量小于 30 的日期
         return row['rank'] <= row['coin_count'] * 0.2
     else:
-        # 如果币种数量大于30，选择前30个
-        return row['rank'] <= 33
+        return row['rank'] <= 30
     
 def pair_filter(data_folder, start_date, end_date):
     all_data = []
@@ -57,7 +56,7 @@ def pair_filter(data_folder, start_date, end_date):
 
     # 对DataFrame进行分组并滚动计算3日累计成交额
     df = df.sort_values(by=['coin_pair', 'date'])
-    df['3_day_turnover'] = df.groupby('coin_pair')['turnover'].rolling(3, min_periods=1).sum().shift(1).reset_index(level=0, drop=True)
+    df['3_day_turnover'] = df.groupby('coin_pair')['turnover'].rolling(7, min_periods=1).sum().shift(1).reset_index(level=0, drop=True)
 
     # 排序并筛选每个日期的前20%
     df['rank'] = df.groupby('date')['3_day_turnover'].rank("dense", ascending=False)
@@ -70,7 +69,7 @@ def pair_filter(data_folder, start_date, end_date):
     df_top_sorted = df_top.sort_values(by=['date', 'rank'], ascending=[True, True])
 
     # 排除特定币对
-    blacklist = ['USDC_USDT', 'BUSD_USDT', 'TUSD_USDT', 'FDUSD_USDT']
+    blacklist = ['USDC_USDT', 'BUSD_USDT', 'TUSD_USDT', 'FDUSD_USDT', 'ERD_USDT']
     df_filtered = df_top_sorted[~df_top_sorted['coin_pair'].isin(blacklist)]
 
     return df_filtered[['date', 'coin_pair', 'rank']]    
@@ -101,19 +100,21 @@ ohlcv_dict = build_ohlcv_dict(df_filtered)
 data = vbt.Data.from_data(ohlcv_dict, silence_warnings=True)
 
 # 使用 groupby 按 date 分组，并计算每组的 coin_pair 数量
-# coin_pair_stats_by_date = df_filtered.groupby('date').agg(
-#     count=('coin_pair', 'size'),  # 计算每天的币对数量
-#     coin_pairs=('coin_pair', lambda x: ', '.join(x))  # 将每天的币对合并成一个字符串列表
-# ).reset_index()
+coin_pair_stats_by_date = df_filtered.groupby('date').agg(
+    count=('coin_pair', 'size'),  # 计算每天的币对数量
+    coin_pairs=('coin_pair', lambda x: ', '.join(x))  # 将每天的币对合并成一个字符串列表
+).reset_index()
 
-# # 将统计结果保存到 CSV 文件中
-# coin_pair_stats_by_date.to_csv('coin_pair_stats_by_date.csv', index=False)
-# print("okk")
+# 将统计结果保存到 CSV 文件中
+coin_pair_stats_by_date.to_csv('coin_pair_stats_by_date.csv', index=False)
+df_filtered.to_csv('df_filtered.csv', index=False)
+print("okk")
 
 open = data.get('Open')
 high = data.get('High')
 close = data.get('Close')
 low = data.get('Low')
+volume = data.get('Volume')
 btc_close = close['BTC_USDT']
 btc_ma50 = vbt.MA.run(btc_close, 50)
 ma20 = vbt.MA.run(close, 20)
@@ -132,8 +133,9 @@ def entry_signal():
         if coin_pair in coin_filter.columns:
             coin_filter.at[date, coin_pair] = True
     coin_filter.fillna(False, inplace=True)
-    coin_filter['BTC_USDT'] = False
-
+    # coin_filter['BTC_USDT'] = False
+    # volume_comparison_filter = volume > volume.shift(1)
+    # volume_comparison_filter.fillna(False, inplace=True)
     mask = trend_entry.vbt & coin_filter
     mask_final = mask.vbt & btc_bull_filter
     return mask_final
@@ -155,7 +157,7 @@ def cal_atr():
 mask = entry_signal()
 exit_mask = exit_signal()
 atr = cal_atr()
-
+    
 entries = pd.DataFrame(False, index=mask.index, columns=mask.columns)
 exits = pd.DataFrame(False, index=mask.index, columns=mask.columns)
 holdings = {}
@@ -192,7 +194,7 @@ def update_capital_and_exit(date, coin_pair, exit_price, exit_size):
 
     capital_df.at[date, 'Asset Value'] = capital_df.at[date, 'Remaining Cash'] + asset_value_sum   
     exited_coins.add(coin_pair)
-    # print("Coins in holdings:", list(holdings.keys()))
+    print("Coins in holdings:", list(holdings.keys()))
 
 def update_capital_and_entry(date, coin_pair, current_price, stake_amount, update_holdings=True):
     available_cash = capital_df.at[date, 'Available Cash']
@@ -248,14 +250,17 @@ for date, signals_on_date in mask.iterrows():  # 遍历 mask 中的每个日期
         current_price = close.at[date, coin_pair]
         atr_value = atr.loc[date, (atr_window, coin_pair)]
         last_entry_price = holdings[coin_pair]['trades'][-1]['entry_price']
+        entry_price = sum(trade['entry_price'] * trade['size'] for trade in holdings[coin_pair]['trades']) / exit_size
 
-        # if current_price <= 0.5 * entry_price or exit_mask.at[date, coin_pair]:
-        if exit_mask.at[date, coin_pair]:
+        if current_price <= 0.5 * entry_price:
             update_capital_and_exit(date, coin_pair, current_price, exit_size)
-            print(coin_pair, "update exit size cas stoploss or exit trend ",capital_df.loc[date])
-            continue
+            print(coin_pair, "update exit size cas stoploss",capital_df.loc[date])          
 
-        if (current_price >= last_entry_price + 0.5 * atr_value) and (1 <= len(holdings[coin_pair]['trades']) <= 3): #加仓最多3次
+        elif exit_mask.at[date, coin_pair]:
+            update_capital_and_exit(date, coin_pair, current_price, exit_size)
+            print(coin_pair, "update exit size cas exit trend",capital_df.loc[date])                   
+
+        elif (current_price >= last_entry_price + 0.5 * atr_value) and (1 <= len(holdings[coin_pair]['trades']) <= (position_count-1)): #加仓最多3次
             first_trade = holdings[coin_pair]['trades'][0]
             stake_amount = first_trade['entry_price'] * first_trade['size']
             result = update_capital_and_entry(date, coin_pair, current_price, stake_amount, update_holdings=True)
@@ -270,6 +275,7 @@ for date, signals_on_date in mask.iterrows():  # 遍历 mask 中的每个日期
     sorted_signals = rank_on_date.sort_values('rank')['coin_pair'].tolist()  # 使用 df_filtered 来确定这些币对的入场顺序
 
     for coin_pair in sorted_signals:
+
         if len(holdings) < 10 and coin_pair not in holdings and coin_pair not in exited_coins:
             # 计算资金量
             asset_value = capital_df.at[date, 'Asset Value']
