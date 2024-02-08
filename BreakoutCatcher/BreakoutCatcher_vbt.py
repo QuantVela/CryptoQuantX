@@ -13,6 +13,12 @@ from json import JSONEncoder
 import quantstats as qs
 import warnings
 
+# 策略规则：
+# 币对筛选：3 日累计成交量前 36 个，去除稳定币和 BTC
+# 进场：突破 30 日内最高价，且 BTC > MA50
+# 出场：BTC < MA50 或第三天收盘时
+# 资金均分 10 份，最多持仓 10 个币
+
 start_time = time.time()
 warnings.filterwarnings('ignore', category=FutureWarning)
 change_date = pd.to_datetime('2020-09-04 00:00:00+00:00')
@@ -23,46 +29,6 @@ class CustomEncoder(JSONEncoder):
             # 将Timestamp转换为字符串
             return obj.strftime('%Y-%m-%d %H:%M:%S %Z')
         return JSONEncoder.default(self, obj)
-
-# def pair_filter(data_folder, start_date, end_date):
-#     all_data = []
-
-#     # 合并所有Feather文件数据到一个DataFrame
-#     for filename in os.listdir(data_folder):
-#         if filename.endswith('.feather'):
-#             coin_pair = filename.split('-')[0] 
-#             file_path = os.path.join(data_folder, filename)
-#             try:
-#                 data = pd.read_feather(file_path)
-#                 if 'date' in data.columns:
-#                     data['coin_pair'] = coin_pair  # 添加币对列
-#                     all_data.append(data)
-#             except Exception as e:
-#                 print(f"Error reading {filename}: {e}")
-
-#     # 检查并合并DataFrame
-#     df = pd.concat([df for df in all_data if not df.empty])
-
-#     df['date'] = pd.to_datetime(df['date'], utc=True)
-#     df = df[(df['date'] >= start_date) & (df['date'] <= end_date)]
-#     df['turnover'] = (df['open'] + df['high'] + df['low']) / 3 * df['volume']
-
-#     # 对DataFrame进行分组并滚动计算3日累计成交额
-#     df = df.sort_values(by=['coin_pair', 'date'])
-#     df['3_day_turnover'] = df.groupby('coin_pair')['turnover'].rolling(3, min_periods=1).sum().shift(1).reset_index(level=0, drop=True)
-
-#     # 排序并筛选每个日期的前20%
-#     df['rank'] = df.groupby('date')['3_day_turnover'].rank("dense", ascending=False)
-#     df_top20 = df[df['rank'] <= df.groupby('date')['rank'].transform(lambda x: x.size // 5)]
-
-#     # 排序DataFrame
-#     df_top20_sorted = df_top20.sort_values(by=['date', 'rank'], ascending=[True, True])
-
-#     # 排除特定币对
-#     blacklist = ['USDC_USDT', 'BUSD_USDT', 'TUSD_USDT', 'FDUSD_USDT']
-#     df_filtered = df_top20_sorted[~df_top20_sorted['coin_pair'].isin(blacklist)]
-
-#     return df_filtered[['date', 'coin_pair', 'rank']]
 
 def select_top_n(row):
     if row['date'] <= change_date:
@@ -168,13 +134,11 @@ low = data.get('Low')
 
 def entry_signal():
     high_30, breakout = get_highest(high)
-    # print(breakout)
     btc_close_1d = close['BTC_USDT'].resample('D').last()
     btc_ma50_1d = vbt.MA.run(btc_close_1d, 50)
     btc_filter_1d = btc_ma50_1d.ma_below(btc_close_1d)
     btc_filter_1h = btc_filter_1d.reindex(breakout.index, method='ffill')
-    # print(btc_filter_1h)
-
+    # print(btc_filter_1h.tail(100))
     coin_filter = pd.DataFrame(index=breakout.index, columns=breakout.columns)
     for _, row in df_filtered.iterrows():
         date = row['date']
@@ -199,10 +163,24 @@ def entry_signal():
     return mask_final
 
 mask = entry_signal()
+
+def exit_signal(mask):
+    btc_close_1d = close['BTC_USDT'].resample('D').last()
+    btc_ma50_1d = vbt.MA.run(btc_close_1d, 50)
+    btc_bear_filter_1d = btc_ma50_1d.ma_above(btc_close_1d)
+    btc_bear_filter_1h = btc_bear_filter_1d.reindex(mask.index, method='ffill')
+    # pd.set_option('display.max_rows', 100)
+    # print(btc_bear_filter_1h)
+    return btc_bear_filter_1h
+
+btc_bear_filter_1h = exit_signal(mask)
 # print(mask)
 
 entries = pd.DataFrame(False, index=mask.index, columns=mask.columns)
 exits = pd.DataFrame(False, index=mask.index, columns=mask.columns)
+exits_filter = exits.vbt | btc_bear_filter_1h
+# pd.set_option('display.max_rows', 100)
+# print(exits_filter.tail(100))
 holdings = {}
 lowest_price, is_breakdown = get_lowest(low)
 exited_coins = set()
@@ -291,7 +269,13 @@ for date, signals_on_date in mask.iterrows():  # 遍历 mask 中的每个日期�
         #     exits.at[exit_date, coin_pair] = True  # 在第三天的00:00设置退出信号
         #     print("持仓币对：",list(holdings.keys()))
         #     del holdings[coin_pair]  # 移除币对
-        if date - entry_date > Timedelta(days=2) and date.hour == 0:
+
+        # 检查exits_filter在此日期和币对下的值是否为True
+        if exits_filter.at[date, coin_pair]:
+            update_capital_and_exit(date, coin_pair, current_price, exit_size)
+            print(f"{coin_pair} exit because BTC is below MA50", capital_df.loc[date])
+
+        elif date - entry_date > Timedelta(days=2) and date.hour == 0:
             update_capital_and_exit(date, coin_pair, current_price, exit_size)
             print(coin_pair, "update exit size cas 3days",capital_df.loc[date])
 
@@ -370,7 +354,7 @@ def gen_tradelog(csv_path, tradelog_csv_path):
             '买入时间': buy_row['Fill Index'] if 'Fill Index' in buy_row else buy_row['Index'],
             '买入价格': buy_row['Price'],
             '买入数量': buy_row['Size'],
-            '卖出时间': sell_row['Fill Index'] if 'Fill Index' in buy_row else buy_row['Index'],
+            '卖出时间': sell_row['Fill Index'] if 'Fill Index' in sell_row else sell_row['Index'],
             '卖出价格': sell_row['Price'],
             '卖出数量': sell_row['Size'],
             'USDT Value': buy_row['Price'] * buy_row['Size'],
