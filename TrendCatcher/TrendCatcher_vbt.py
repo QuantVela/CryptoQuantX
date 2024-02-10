@@ -1,10 +1,7 @@
 import numpy as np
 import pandas as pd
-from datetime import datetime
 import vectorbtpro as vbt
-import matplotlib.pyplot as plt
 import os
-from numba import njit
 import time
 import json
 from pandas import Timestamp
@@ -12,6 +9,13 @@ from pandas import Timedelta
 from json import JSONEncoder
 import quantstats as qs
 import warnings
+
+# 策略规则：
+# 币对筛选：3 日累计成交量前 32 个，去除稳定币
+# 进场：收盘价上穿 ma20，且 BTC > MA50
+# 出场：BTC < MA50 或收盘价下穿 ma20
+# 资金：按 ATR 把资金分为 10 份，最多持仓 10 个币。每上涨 0.25ATR 加仓，可加仓 2 次。
+# 回报：6858%,回撤：40%,胜率：23%，还有一个每 0.5ATR 加仓 1 次的数据差不多，但拿着没那么舒服
 
 start_time = time.time()
 warnings.filterwarnings('ignore', category=FutureWarning)
@@ -29,7 +33,7 @@ def select_top_n(row):
         # 币种数量小于 30 的日期
         return row['rank'] <= row['coin_count'] * 0.2
     else:
-        return row['rank'] <= 30
+        return row['rank'] <= 32
     
 def pair_filter(data_folder, start_date, end_date):
     all_data = []
@@ -56,7 +60,7 @@ def pair_filter(data_folder, start_date, end_date):
 
     # 对DataFrame进行分组并滚动计算3日累计成交额
     df = df.sort_values(by=['coin_pair', 'date'])
-    df['3_day_turnover'] = df.groupby('coin_pair')['turnover'].rolling(7, min_periods=1).sum().shift(1).reset_index(level=0, drop=True)
+    df['3_day_turnover'] = df.groupby('coin_pair')['turnover'].rolling(3, min_periods=1).sum().shift(1).reset_index(level=0, drop=True)
 
     # 排序并筛选每个日期的前20%
     df['rank'] = df.groupby('date')['3_day_turnover'].rank("dense", ascending=False)
@@ -79,7 +83,7 @@ def build_ohlcv_dict(df_filtered):
     unique_coin_pairs = df_filtered['coin_pair'].unique()
 
     for coin_pair in unique_coin_pairs:
-        feather_path = f"../ft_userdata/user_data/data/binance/allpairs/1d/{coin_pair}-1d.feather"
+        feather_path = f"../ft_userdata/user_data/data/binance/allpairs/1h/{coin_pair}-1h.feather"
         if os.path.exists(feather_path):
             df_ohlcv = pd.read_feather(feather_path)
             df_ohlcv.set_index('date', inplace=True)
@@ -115,48 +119,68 @@ high = data.get('High')
 close = data.get('Close')
 low = data.get('Low')
 volume = data.get('Volume')
-btc_close = close['BTC_USDT']
-btc_ma50 = vbt.MA.run(btc_close, 50)
-ma20 = vbt.MA.run(close, 20)
+close_1d = close.resample('D').last()
+high_1d = high.resample('D').max()
+low_1d = low.resample('D').min()
+
+btc_close_1d = close_1d['BTC_USDT']
+btc_ma50 = vbt.MA.run(btc_close_1d, 50)
+ma20 = vbt.MA.run(close_1d, 20)
+btc_bull_filter = btc_ma50.ma_below(btc_close_1d)
 
 def entry_signal():
     #btc filter
-    btc_bull_filter = btc_ma50.ma_below(btc_close)
+    btc_bull_filter = btc_ma50.ma_below(btc_close_1d)
+    #因为vbt会在一根bar的close处执行订单，为了避免lookahead bias需要把信号后移
+    btc_bull_filter_at_23 = btc_bull_filter.shift(1, freq='23H') 
+    btc_bull_filter_1h = btc_bull_filter_at_23.reindex(close.index, method='ffill')
+    btc_bull_filter_1h.fillna(False, inplace=True)
     #trend indicator
-    trend_entry = ma20.ma_below(close)
+    trend_entry = ma20.ma_crossed_below(close_1d) #收盘价上穿 ma20 时
     trend_entry.columns = trend_entry.columns.droplevel('ma_window')
+    trend_entry_at_23 = trend_entry.shift(1, freq='23H') 
+    trend_entry_1h = trend_entry_at_23.reindex(close.index, method='ffill')
+    trend_entry_1h.fillna(False, inplace=True)
     #coin top20% filter
-    coin_filter = pd.DataFrame(index=trend_entry.index, columns=trend_entry.columns)
+    coin_filter = pd.DataFrame(index=trend_entry_1h.index, columns=trend_entry_1h.columns)
     for _, row in df_filtered.iterrows():
         date = row['date']
         coin_pair = row['coin_pair']
         if coin_pair in coin_filter.columns:
             coin_filter.at[date, coin_pair] = True
-    coin_filter.fillna(False, inplace=True)
-    # coin_filter['BTC_USDT'] = False
-    # volume_comparison_filter = volume > volume.shift(1)
-    # volume_comparison_filter.fillna(False, inplace=True)
-    mask = trend_entry.vbt & coin_filter
-    mask_final = mask.vbt & btc_bull_filter
+    coin_filter_1h = coin_filter.groupby(coin_filter.index.date).ffill() #把1d信号填充到1h
+    coin_filter_1h.fillna(False, inplace=True)
+    coin_filter_1h = coin_filter_1h[:-1] #因为最底下莫名多出来一行
+
+    mask = trend_entry_1h.vbt & coin_filter_1h
+    mask_final = mask.vbt & btc_bull_filter_1h
     return mask_final
 
 def exit_signal():
     #btc filter
-    btc_bear_filter = btc_ma50.ma_above(btc_close)
+    btc_bear_filter = btc_ma50.ma_above(btc_close_1d)
+    btc_bear_filter_at_23 = btc_bear_filter.shift(1, freq='23H')
+    btc_bear_filter_1h = btc_bear_filter_at_23.reindex(close.index, method='ffill')
+    btc_bear_filter_1h.fillna(False, inplace=True)
     #trend indicator
-    trend_exit = ma20.ma_above(close)
+    trend_exit = ma20.ma_crossed_above(close_1d) #收盘价下穿 ma20 时
     trend_exit.columns = trend_exit.columns.droplevel('ma_window')
-    exit_mask = trend_exit.vbt & btc_bear_filter
-    return exit_mask
+    trend_exit_at_23 = trend_exit.shift(1, freq='23H')
+    trend_exit_1h = trend_exit_at_23.reindex(close.index, method='ffill')
+    trend_exit_1h.fillna(False, inplace=True)
+
+    exit_mask_1h = trend_exit_1h.vbt | btc_bear_filter_1h
+    return exit_mask_1h
 
 def cal_atr():
-    ATR = vbt.ATR.run(high, low, close, window=14)
+    ATR = vbt.ATR.run(high_1d, low_1d, close_1d, window=14)
     atr = ATR.atr
     return atr
 
 mask = entry_signal()
 exit_mask = exit_signal()
-atr = cal_atr()
+atr_1d = cal_atr()
+atr = atr_1d.reindex(mask.index, method='ffill')
     
 entries = pd.DataFrame(False, index=mask.index, columns=mask.columns)
 exits = pd.DataFrame(False, index=mask.index, columns=mask.columns)
@@ -168,7 +192,7 @@ capital_df = pd.DataFrame(np.nan, index=mask.index, columns=capital_columns)
 initial_cash = 10000
 fees = 0.001
 risk_factor = 0.01
-position_count = 4
+position_count = 3
 atr_window = 14  # ATR 的第一个索引
 capital_df.iloc[0] = [initial_cash, initial_cash * 0.99, initial_cash]  # 初始资金分配
 
@@ -260,7 +284,7 @@ for date, signals_on_date in mask.iterrows():  # 遍历 mask 中的每个日期
             update_capital_and_exit(date, coin_pair, current_price, exit_size)
             print(coin_pair, "update exit size cas exit trend",capital_df.loc[date])                   
 
-        elif (current_price >= last_entry_price + 0.5 * atr_value) and (1 <= len(holdings[coin_pair]['trades']) <= (position_count-1)): #加仓最多3次
+        elif (current_price >= last_entry_price + 0.25 * atr_value) and (1 <= len(holdings[coin_pair]['trades']) <= (position_count-1)): #加仓最多3次
             first_trade = holdings[coin_pair]['trades'][0]
             stake_amount = first_trade['entry_price'] * first_trade['size']
             result = update_capital_and_entry(date, coin_pair, current_price, stake_amount, update_holdings=True)
@@ -270,9 +294,10 @@ for date, signals_on_date in mask.iterrows():  # 遍历 mask 中的每个日期
     signals = signals_on_date[signals_on_date].index.tolist()  # 检查当前日期有哪些币对发出了入场信号
     if not signals or len(holdings) >= 10:
         continue
-    rank_on_date = df_filtered[df_filtered['date'] == date]
+    date_daily = pd.to_datetime(date).normalize() # 将 mask 的按小时日期转换为按天日期，以便与 df_filtered 对齐
+    rank_on_date = df_filtered[df_filtered['date'] == date_daily]
     rank_on_date = rank_on_date[rank_on_date['coin_pair'].isin(signals)]
-    sorted_signals = rank_on_date.sort_values('rank')['coin_pair'].tolist()  # 使用 df_filtered 来确定这些币对的入场顺序
+    sorted_signals = rank_on_date.sort_values('rank')['coin_pair'].tolist()
 
     for coin_pair in sorted_signals:
 
@@ -356,7 +381,7 @@ def gen_tradelog(csv_path):
 
     columns_order = [
         '交易币对', '首次买入时间', '首次买入价格', '首次买入数量',
-        '加仓1买入价格', '加仓1买入数量', '加仓2买入价格', '加仓2买入数量','加仓3买入价格', '加仓3买入数量',
+        '加仓1买入价格', '加仓1买入数量', '加仓2买入价格', '加仓2买入数量',
         '卖出时间', '卖出价格', '卖出数量', 'USDT Value', 'Fees'
     ]
 
