@@ -1,10 +1,7 @@
 import numpy as np
 import pandas as pd
-from datetime import datetime
 import vectorbtpro as vbt
-import matplotlib.pyplot as plt
 import os
-from numba import njit
 import time
 import json
 from pandas import Timestamp
@@ -14,12 +11,13 @@ import quantstats as qs
 import warnings
 
 # 策略规则：
-# 币对筛选：5 日累计成交量前 32 个，去除稳定币和 BTC
-# 进场：突破 30 日内最高价，且 BTC > MA50
-# 出场：BTC < MA50 或第三天收盘时
-# 资金均分 10 份，最多持仓 10 个币
-# 回报：3728%,回撤：39%,胜率：50%
-# To do: 结合 volatility contraction
+# 币对筛选：3 日累计成交量前 32 个，去除稳定币
+# 进场：收盘价下穿 ma20，且 BTC < MA50
+# 出场：BTC > MA50 或收盘价上穿 ma20
+# 资金：按 ATR 把资金分为 20 份，最多持仓 20 个币。每下跌 0.25ATR 加仓，可加仓 2 次。
+# 回报：35%,回撤：14%,胜率：31%
+# 状态：暂时搁浅
+# 还有一些bug 要解决，但目前为止不太喜欢这个策略，回报太低，如果必须要一个空头策略我更想要胜率更高的均值回归，小胜维持资金不要下跌太多就好
 
 start_time = time.time()
 warnings.filterwarnings('ignore', category=FutureWarning)
@@ -34,10 +32,9 @@ class CustomEncoder(JSONEncoder):
 
 def select_top_n(row):
     if row['date'] <= change_date:
-        # 如果币种数量小于等于30，选择前20%
+        # 币种数量小于 30 的日期
         return row['rank'] <= row['coin_count'] * 0.2
     else:
-        # 如果币种数量大于30，选择前30个
         return row['rank'] <= 32
     
 def pair_filter(data_folder, start_date, end_date):
@@ -65,7 +62,7 @@ def pair_filter(data_folder, start_date, end_date):
 
     # 对DataFrame进行分组并滚动计算3日累计成交额
     df = df.sort_values(by=['coin_pair', 'date'])
-    df['3_day_turnover'] = df.groupby('coin_pair')['turnover'].rolling(5, min_periods=1).sum().shift(1).reset_index(level=0, drop=True)
+    df['3_day_turnover'] = df.groupby('coin_pair')['turnover'].rolling(3, min_periods=1).sum().shift(1).reset_index(level=0, drop=True)
 
     # 排序并筛选每个日期的前20%
     df['rank'] = df.groupby('date')['3_day_turnover'].rank("dense", ascending=False)
@@ -98,16 +95,6 @@ def build_ohlcv_dict(df_filtered):
 
     return ohlcv_dict
 
-def get_highest(high, period=30*24):
-    highest = high.rolling(period).max()
-    breakout = high >= highest
-    return highest, breakout
-
-def get_lowest(low, period=10*24):
-    lowest = low.rolling(period).min()
-    breakdown = low <= lowest
-    return lowest, breakdown
-
 # 设置数据文件夹路径和日期范围
 data_folder = '../ft_userdata/user_data/data/binance/allpairs/1d/'
 start_date = pd.to_datetime("2017-08-18 00:00:00+00:00")
@@ -118,12 +105,6 @@ df_filtered = pair_filter(data_folder, start_date, end_date)
 ohlcv_dict = build_ohlcv_dict(df_filtered)
 data = vbt.Data.from_data(ohlcv_dict, silence_warnings=True)
 
-open = data.get('Open')
-high = data.get('High')
-close = data.get('Close')
-low = data.get('Low')
-# print(close)
-
 # 使用 groupby 按 date 分组，并计算每组的 coin_pair 数量
 # coin_pair_stats_by_date = df_filtered.groupby('date').agg(
 #     count=('coin_pair', 'size'),  # 计算每天的币对数量
@@ -131,78 +112,117 @@ low = data.get('Low')
 # ).reset_index()
 
 # # 将统计结果保存到 CSV 文件中
-# coin_pair_stats_by_date.to_csv('coin_pair.csv', index=False)
+# coin_pair_stats_by_date.to_csv('coin_pair_stats_by_date.csv', index=False)
+# df_filtered.to_csv('df_filtered.csv', index=False)
 # print("okk")
 
+open = data.get('Open')
+high = data.get('High')
+close = data.get('Close')
+low = data.get('Low')
+volume = data.get('Volume')
+close_1d = close.resample('D').last()
+high_1d = high.resample('D').max()
+low_1d = low.resample('D').min()
+
+btc_close_1d = close_1d['BTC_USDT']
+btc_ma50 = vbt.MA.run(btc_close_1d, 50)
+ma20 = vbt.MA.run(close_1d, 20)
+
 def entry_signal():
-    #breakout
-    high_30, breakout = get_highest(high)
     #btc filter
-    btc_close_1d = close['BTC_USDT'].resample('D').last()
-    btc_ma50_1d = vbt.MA.run(btc_close_1d, 50)
-    btc_filter_1d = btc_ma50_1d.ma_below(btc_close_1d)
-    btc_filter_at_23 = btc_filter_1d.shift(1, freq='23H')
-    btc_filter_1h = btc_filter_at_23.reindex(breakout.index, method='ffill')
-    btc_filter_1h.fillna(False, inplace=True)
-    #coin filter
-    coin_filter = pd.DataFrame(index=breakout.index, columns=breakout.columns)
+    btc_bear_filter = btc_ma50.ma_above(btc_close_1d)
+    #因为vbt会在一根bar的close处执行订单，为了避免lookahead bias需要把信号后移
+    btc_bear_filter_at_23 = btc_bear_filter.shift(1, freq='23H') 
+    btc_bear_filter_1h = btc_bear_filter_at_23.reindex(close.index, method='ffill')
+    btc_bear_filter_1h.fillna(False, inplace=True)
+    #trend indicator
+    trend_entry = ma20.ma_crossed_above(close_1d) #收盘价下穿 ma20 时
+    trend_entry.columns = trend_entry.columns.droplevel('ma_window')
+    trend_entry_at_23 = trend_entry.shift(1, freq='23H') 
+    trend_entry_1h = trend_entry_at_23.reindex(close.index, method='ffill')
+    trend_entry_1h.fillna(False, inplace=True)
+    #coin top20% filter
+    coin_filter = pd.DataFrame(index=trend_entry_1h.index, columns=trend_entry_1h.columns)
     for _, row in df_filtered.iterrows():
         date = row['date']
         coin_pair = row['coin_pair']
         if coin_pair in coin_filter.columns:
             coin_filter.at[date, coin_pair] = True
-    coin_filter = coin_filter.groupby(coin_filter.index.date).ffill() #把1d信号填充到1h
-    coin_filter.fillna(False, inplace=True)
-    coin_filter['BTC_USDT'] = False
-    coin_filter = coin_filter.iloc[:-1]
+    coin_filter_1h = coin_filter.groupby(coin_filter.index.date).ffill() #把1d信号填充到1h
+    coin_filter_1h.fillna(False, inplace=True)
+    coin_filter_1h['BTC_USDT'] = False
+    coin_filter_1h = coin_filter_1h[:-1] #因为最底下莫名多出来一行
 
-    mask = breakout.vbt & coin_filter 
-    mask_final = mask.vbt & btc_filter_1h
+    mask = trend_entry_1h.vbt & coin_filter_1h
+    mask_final = mask.vbt & btc_bear_filter_1h
     return mask_final
 
+def exit_signal():
+    #btc filter
+    btc_bull_filter = btc_ma50.ma_below(btc_close_1d)
+    btc_bull_filter_at_23 = btc_bull_filter.shift(1, freq='23H')
+    btc_bull_filter_1h = btc_bull_filter_at_23.reindex(close.index, method='ffill')
+    btc_bull_filter_1h.fillna(False, inplace=True)
+    #trend indicator
+    trend_exit = ma20.ma_crossed_below(close_1d) #收盘价上穿 ma20 时
+    trend_exit.columns = trend_exit.columns.droplevel('ma_window')
+    trend_exit_at_23 = trend_exit.shift(1, freq='23H')
+    trend_exit_1h = trend_exit_at_23.reindex(close.index, method='ffill')
+    trend_exit_1h.fillna(False, inplace=True)
+
+    exit_mask_1h = trend_exit_1h.vbt | btc_bull_filter_1h
+    return exit_mask_1h
+
+def cal_atr():
+    ATR = vbt.ATR.run(high_1d, low_1d, close_1d, window=14)
+    atr = ATR.atr
+    return atr
+
 mask = entry_signal()
-
-def exit_signal(mask):
-    btc_close_1d = close['BTC_USDT'].resample('D').last()
-    btc_ma50_1d = vbt.MA.run(btc_close_1d, 50)
-    btc_bear_filter_1d = btc_ma50_1d.ma_above(btc_close_1d)
-    btc_bear_filter_at_23 = btc_bear_filter_1d.shift(1, freq='23H')
-    btc_bear_filter_1h = btc_bear_filter_at_23.reindex(mask.index, method='ffill')
-    btc_bear_filter_1h.fillna(False, inplace=True)
-    return btc_bear_filter_1h
-
-btc_bear_filter_1h = exit_signal(mask)
-
+exit_mask = exit_signal()
+atr_1d = cal_atr()
+atr = atr_1d.reindex(mask.index, method='ffill')
+    
 entries = pd.DataFrame(False, index=mask.index, columns=mask.columns)
 exits = pd.DataFrame(False, index=mask.index, columns=mask.columns)
-exits_filter = exits.vbt | btc_bear_filter_1h
 holdings = {}
-lowest_price, is_breakdown = get_lowest(low)
 exited_coins = set()
 size = pd.DataFrame(0, index=mask.index, columns=mask.columns)
 capital_columns = ['Remaining Cash', 'Available Cash', 'Asset Value']
 capital_df = pd.DataFrame(np.nan, index=mask.index, columns=capital_columns)
 initial_cash = 10000
 fees = 0.001
+risk_factor = 0.005
+position_count = 3
+atr_window = 14  # ATR 的第一个索引
 capital_df.iloc[0] = [initial_cash, initial_cash * 0.99, initial_cash]  # 初始资金分配
 
 def update_capital_and_exit(date, coin_pair, exit_price, exit_size):
     exits.at[date, coin_pair] = True
     size.at[date, coin_pair] = -exit_size
     # print(coin_pair, "exit size",exit_size)
+    
     capital_gain = exit_price * exit_size * (1 - fees)
+    # total_sum_for_coin_pair = sum(trade['entry_price'] * trade['size'] for trade in holdings[coin_pair]['trades'])
+    # profit = capital_gain - total_sum_for_coin_pair
+    # print("该笔收益",date, coin_pair, profit)
+
     capital_df.at[date, 'Remaining Cash'] += capital_gain
-    print(coin_pair,"Remaining Cash",capital_df.at[date, 'Remaining Cash'])
+    # print(coin_pair,"Remaining Cash",capital_df.at[date, 'Remaining Cash'])
     capital_df.at[date, 'Available Cash'] = capital_df.at[date, 'Remaining Cash'] * 0.99
     del holdings[coin_pair]
+
     asset_value_sum = sum(
-        holdings[coin]['entry_price'] * holdings[coin]['size'] for coin in holdings
+        trade['entry_price'] * trade['size'] for coin in holdings for trade in holdings[coin]['trades']
     ) 
+    # print("sum", asset_value_sum)
+
     capital_df.at[date, 'Asset Value'] = capital_df.at[date, 'Remaining Cash'] + asset_value_sum   
     exited_coins.add(coin_pair)
-    # print("Coins in holdings:", list(holdings.keys()))
+    print("Coins in holdings:", list(holdings.keys()))
 
-def update_capital_and_entry(date, coin_pair, current_price, stake_amount):
+def update_capital_and_entry(date, coin_pair, current_price, stake_amount, update_holdings=True):
     available_cash = capital_df.at[date, 'Available Cash']
     
     if stake_amount > available_cash:
@@ -213,8 +233,12 @@ def update_capital_and_entry(date, coin_pair, current_price, stake_amount):
     trade_size = stake_amount / current_price
     size.at[date, coin_pair] = trade_size
 
-    # 更新 holdings
-    holdings[coin_pair] = {'entry_date': date, 'entry_price': current_price, 'size': trade_size}
+    # 更新或添加新的交易记录到 holdings
+    trade = {'entry_date': date, 'entry_price': current_price, 'size': trade_size}
+    if update_holdings:
+        holdings[coin_pair]['trades'].append(trade)
+    else:
+        holdings[coin_pair] = {'trades': [trade]}
 
     # 更新 capital_df
     capital_df.at[date, 'Remaining Cash'] -= trade_size * current_price * (1 + fees)
@@ -222,11 +246,12 @@ def update_capital_and_entry(date, coin_pair, current_price, stake_amount):
 
     # 计算新的 Asset Value
     asset_value = capital_df.at[date, 'Remaining Cash'] + sum(
-        holdings[coin]['entry_price'] * holdings[coin]['size'] for coin in holdings
+        trade['entry_price'] * trade['size'] for coin in holdings for trade in holdings[coin]['trades']
     )
     capital_df.at[date, 'Asset Value'] = asset_value
+    return True
 
-for date, signals_on_date in mask.iterrows():  # 遍历 mask 中的每个日期（按小时）
+for date, signals_on_date in mask.iterrows():  # 遍历 mask 中的每个日期
 
     exited_coins.clear()
 
@@ -240,72 +265,58 @@ for date, signals_on_date in mask.iterrows():  # 遍历 mask 中的每个日期�
         for coin_pair in list(holdings):
             # 以最后一条数据的收盘价强制平仓退出
             exit_price = close.at[date, coin_pair]
-            exit_size = holdings[coin_pair]['size']
+            exit_size = sum(trade['size'] for trade in holdings[coin_pair]['trades'])
             update_capital_and_exit(date, coin_pair, exit_price, exit_size)
             print(coin_pair, "update exit size cas force",capital_df.loc[date])
         continue
 
     for coin_pair in list(holdings):  # 使用list来避免在循环中修改字典
-        entry_date = holdings[coin_pair]['entry_date']
-        entry_price = holdings[coin_pair]['entry_price']
-        exit_size = holdings[coin_pair]['size']
-        # 检查当前价格是否下跌至入场价格的50%
+        entry_date = holdings[coin_pair]['trades'][0]['entry_date']
+        exit_size = sum(trade['size'] for trade in holdings[coin_pair]['trades'])
         current_price = close.at[date, coin_pair]
-        
-        # if current_price <= 0.5 * entry_price or is_breakdown.at[date, coin_pair]:
-        # if is_breakdown.at[date, coin_pair]:
+        atr_value = atr.loc[date, (atr_window, coin_pair)]
+        last_entry_price = holdings[coin_pair]['trades'][-1]['entry_price']
+        entry_price = sum(trade['entry_price'] * trade['size'] for trade in holdings[coin_pair]['trades']) / exit_size
+
+        # if current_price <= 0.5 * entry_price:
         #     update_capital_and_exit(date, coin_pair, current_price, exit_size)
-        #     print(coin_pair, "update exit size cas low10",capital_df.loc[date])
-        #     continue
+        #     print(coin_pair, "update exit size cas stoploss",capital_df.loc[date])          
 
-        # 检查持仓是否已满3天
-        # if date - entry_date >= Timedelta(days=2):
-        #     exit_date = (entry_date + Timedelta(days=3)).normalize()
-        #     exits.at[exit_date, coin_pair] = True  # 在第三天的00:00设置退出信号
-        #     print("持仓币对：",list(holdings.keys()))
-        #     del holdings[coin_pair]  # 移除币对
-
-        # 检查exits_filter在此日期和币对下的值是否为True
-        if exits_filter.at[date, coin_pair]:
+        if exit_mask.at[date, coin_pair]:
             update_capital_and_exit(date, coin_pair, current_price, exit_size)
-            print(f"{coin_pair} exit because BTC is below MA50", capital_df.loc[date])
+            print(coin_pair, "update exit size cas exit trend",capital_df.loc[date])                   
 
-        elif date - entry_date > Timedelta(days=2) and date.hour == 0:
-            update_capital_and_exit(date, coin_pair, current_price, exit_size)
-            print(coin_pair, "update exit size cas 3days",capital_df.loc[date])
+        elif (current_price <= last_entry_price - 0.25 * atr_value) and (1 <= len(holdings[coin_pair]['trades']) <= (position_count-1)): #加仓最多3次
+            first_trade = holdings[coin_pair]['trades'][0]
+            stake_amount = first_trade['entry_price'] * first_trade['size']
+            result = update_capital_and_entry(date, coin_pair, current_price, stake_amount, update_holdings=True)
+            if result:
+                print(coin_pair, "adjustment entry size",capital_df.loc[date])
 
-    signals = signals_on_date[signals_on_date].index.tolist()  # 检查当前小时有哪些币对发出了入场信号
-    if not signals or len(holdings) >= 10:
+    signals = signals_on_date[signals_on_date].index.tolist()  # 检查当前日期有哪些币对发出了入场信号
+    if not signals or len(holdings) >= 20:
         continue
     date_daily = pd.to_datetime(date).normalize() # 将 mask 的按小时日期转换为按天日期，以便与 df_filtered 对齐
     rank_on_date = df_filtered[df_filtered['date'] == date_daily]
     rank_on_date = rank_on_date[rank_on_date['coin_pair'].isin(signals)]
-    sorted_signals = rank_on_date.sort_values('rank')['coin_pair'].tolist()  # 使用 df_filtered 来确定这些币对的入场顺序
+    sorted_signals = rank_on_date.sort_values('rank')['coin_pair'].tolist()
 
     for coin_pair in sorted_signals:
-        if len(holdings) < 10 and coin_pair not in holdings and coin_pair not in exited_coins:
-            # 使用原始的按小时的日期时间索引进行记录
+
+        if len(holdings) < 20 and coin_pair not in holdings and coin_pair not in exited_coins:
+            # 计算资金量
             asset_value = capital_df.at[date, 'Asset Value']
-            stake_amount = asset_value / 10
             entry_price = close.at[date, coin_pair]
+            atr_value = atr.loc[date, (atr_window, coin_pair)]
+            stake_amount = asset_value * risk_factor * entry_price / (atr_value * position_count)
+            # print(coin_pair,"stake amount",stake_amount,"asset",asset_value, "price",entry_price)
+            result = update_capital_and_entry(date, coin_pair, entry_price, stake_amount, update_holdings=False)
+            if result:
+                print(coin_pair, "update entry size",capital_df.loc[date])
             # print(json.dumps(holdings, indent=4, cls=CustomEncoder))
-            update_capital_and_entry(date, coin_pair, entry_price, stake_amount)
-            print(coin_pair, "update entry size",capital_df.loc[date])
-
 exits = exits.fillna(False)
+capital_df.to_csv('capital_data.csv', index=True)
 
-# pf = vbt.Portfolio.from_signals(
-#     close=close, 
-#     entries=entries, 
-#     exits=exits, 
-#     init_cash=10000,
-#     size=1/10,
-#     size_type='valuepercent',
-#     cash_sharing=True,
-#     direction='longonly',
-#     fees=0.001,
-#     freq='1h'
-# )
 pf = vbt.Portfolio.from_orders(
     close=close, 
     price=close,
@@ -313,7 +324,7 @@ pf = vbt.Portfolio.from_orders(
     size_type='amount',
     cash_sharing=True,
     init_cash=10000,
-    direction='longonly',
+    direction='shortonly',
     fees=0.001,
     freq='1h'
 )
@@ -327,64 +338,89 @@ btc_returns.name = 'btc'
 daily_returns.index = daily_returns.index.tz_localize(None)
 btc_returns.index = btc_returns.index.tz_localize(None)
 
-qs.reports.html(daily_returns, benchmark=btc_returns, output='report_fo.html')
+qs.reports.html(daily_returns, benchmark=btc_returns, output='report_trend.html')
 
 orders = pf.orders.records_readable
-csv_path = 'orders_date_fo.csv'
-tradelog_csv_path = 'tradelog_date_fo.csv' 
+csv_path = 'orders_trend.csv'
 orders.to_csv(csv_path)
 print("csv done")
 
-def gen_tradelog(csv_path, tradelog_csv_path):
-    csv_path = csv_path
+def gen_tradelog(csv_path):
     orders_df = pd.read_csv(csv_path)
     trades = []
 
-    for i in range(0, len(orders_df), 2):
-        buy_row = orders_df.iloc[i]
-        sell_row = orders_df.iloc[i + 1]
+    sell_counter = 0
+    trade = {}
+    accumulated_fees = 0
 
-        trade = {
-            '交易币对': buy_row['Column'],
-            '买入时间': buy_row['Fill Index'] if 'Fill Index' in buy_row else buy_row['Index'],
-            '买入价格': buy_row['Price'],
-            '买入数量': buy_row['Size'],
-            '卖出时间': sell_row['Fill Index'] if 'Fill Index' in sell_row else sell_row['Index'],
-            '卖出价格': sell_row['Price'],
-            '卖出数量': sell_row['Size'],
-            'USDT Value': buy_row['Price'] * buy_row['Size'],
-            'Fees': buy_row['Fees'] + sell_row['Fees']
-        }
-        trades.append(trade)
+    for i, row in orders_df.iterrows():
+        if row['Side'] == 'Sell':
+            if sell_counter == 0:
+                trade = {
+                    '交易币对': row['Column'],
+                    '首次卖出时间': row['Index'],
+                    '首次卖出价格': row['Price'],
+                    '首次卖出数量': row['Size']
+                }
+            else:
+                trade[f'加仓{sell_counter}卖出价格'] = row['Price']
+                trade[f'加仓{sell_counter}卖出数量'] = row['Size']
+            accumulated_fees += row['Fees'] 
+            sell_counter += 1
 
-    tradelog_df = pd.DataFrame(trades)
-    tradelog_df.sort_values(by='买入时间', inplace=True)
+        elif row['Side'] == 'Buy':  # 当前为买入（平仓做空）
+            trade['买回时间'] = row['Index']
+            trade['买回价格'] = row['Price']
+            trade['买回数量'] = row['Size']
+            trade['USDT Value'] = trade.get('首次卖出价格', 0) * trade.get('首次卖出数量', 0)
+            trade['USDT Value'] += sum([trade.get(f'加仓{i}卖出价格', 0) * trade.get(f'加仓{i}卖出数量', 0) for i in range(1, sell_counter)])
+            accumulated_fees += row['Fees']
+            trade['Fees'] = accumulated_fees
+            trades.append(trade)
+            sell_counter = 0
+            trade = {}
+            accumulated_fees = 0 
+
+    columns_order = [
+        '交易币对', '首次卖出时间', '首次卖出价格', '首次卖出数量',
+        '加仓1卖出价格', '加仓1卖出数量', '加仓2卖出价格', '加仓2卖出数量',
+        '买回时间', '买回价格', '买回数量', 'USDT Value', 'Fees'
+    ]
+
+    # 创建 DataFrame 时使用定义的列顺序
+    tradelog_df = pd.DataFrame(trades, columns=columns_order)
+    tradelog_df.sort_values(by='首次卖出时间', inplace=True)  # 确保按照首次买入时间排序
     initial_capital = 10000
     total_capital = initial_capital
     pnls = []
     total_capitals = []
+    single_trade_returns = []
 
     for index, row in tradelog_df.iterrows():
-        pnl = (row['卖出价格'] * row['卖出数量']) - (row['买入价格'] * row['买入数量']) - row['Fees']
+        pnl = (row['USDT Value'] - row['买回价格'] * row['买回数量']) - row['Fees']
         pnls.append(pnl)
         total_capital += pnl
         total_capitals.append(total_capital)
 
+        single_trade_return = (pnl / row['USDT Value']) * 100 if row['USDT Value'] != 0 else 0
+        single_trade_returns.append(single_trade_return)
+
     tradelog_df['PnL'] = pnls
     tradelog_df['总资金'] = total_capitals
     tradelog_df['PnL Ratio'] = (tradelog_df['PnL'] / tradelog_df['总资金']) * 100
-    tradelog_df['单笔收益率'] = (tradelog_df['PnL'] / tradelog_df['USDT Value']) * 100
+    tradelog_df['单笔收益率'] = single_trade_returns
 
     tradelog_df['PnL'] = tradelog_df['PnL'].apply(lambda x: f"{x:.2f}")
     tradelog_df['总资金'] = tradelog_df['总资金'].apply(lambda x: f"{x:.2f}")
     tradelog_df['PnL Ratio'] = tradelog_df['PnL Ratio'].apply(lambda x: f"{x:.2f}%")
     tradelog_df['单笔收益率'] = tradelog_df['单笔收益率'].apply(lambda x: f"{x:.2f}%")
- 
+
+    tradelog_csv_path = 'tradelog_trend.csv'  
     tradelog_df.to_csv(tradelog_csv_path, index=False)
 
     print("Tradelog CSV has been generated successfully.")
 
-gen_tradelog(csv_path, tradelog_csv_path)
+gen_tradelog(csv_path)
 end_time = time.time()
 execution_time = end_time - start_time
 print(f"Execution time: {execution_time} seconds")
