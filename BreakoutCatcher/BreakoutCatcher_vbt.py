@@ -12,14 +12,15 @@ from pandas import Timedelta
 from json import JSONEncoder
 import quantstats as qs
 import warnings
+import talib
 
 # 策略规则：
-# 币对筛选：5 日累计成交量前 32 个，去除稳定币和 BTC
+# 币对筛选：11 日累计成交量前 32 个，去除稳定币和 BTC, 按 width 排序（按volume排序是 5673，着急可以先上）
+# width 定义：SMA20 的 2 个标准差的布林带宽度，取前一日的值，0-1 之间
 # 进场：突破 30 日内最高价，且 BTC > MA50
 # 出场：BTC < MA50 或第三天收盘时
 # 资金均分 10 份，最多持仓 10 个币
-# 回报：3728%,回撤：39%,胜率：50%
-# To do: 结合 volatility contraction
+# 回报：5918%,回撤：28%,胜率：50% 
 
 start_time = time.time()
 warnings.filterwarnings('ignore', category=FutureWarning)
@@ -63,9 +64,9 @@ def pair_filter(data_folder, start_date, end_date):
     df = df[(df['date'] >= start_date) & (df['date'] <= end_date)]
     df['turnover'] = (df['open'] + df['high'] + df['low']) / 3 * df['volume']
 
-    # 对DataFrame进行分组并滚动计算3日累计成交额
+    # 对DataFrame进行分组并滚动计算x日累计成交额
     df = df.sort_values(by=['coin_pair', 'date'])
-    df['3_day_turnover'] = df.groupby('coin_pair')['turnover'].rolling(5, min_periods=1).sum().shift(1).reset_index(level=0, drop=True)
+    df['3_day_turnover'] = df.groupby('coin_pair')['turnover'].rolling(11, min_periods=1).sum().shift(1).reset_index(level=0, drop=True)
 
     # 排序并筛选每个日期的前20%
     df['rank'] = df.groupby('date')['3_day_turnover'].rank("dense", ascending=False)
@@ -103,7 +104,7 @@ def get_highest(high, period=30*24):
     breakout = high >= highest
     return highest, breakout
 
-def get_lowest(low, period=10*24):
+def get_lowest(low, period=21*24):
     lowest = low.rolling(period).min()
     breakdown = low <= lowest
     return lowest, breakdown
@@ -122,7 +123,14 @@ open = data.get('Open')
 high = data.get('High')
 close = data.get('Close')
 low = data.get('Low')
-# print(close)
+close_1d = close.resample('D').last()
+
+def cal_width(close_1d):
+    bbands = vbt.BBANDS.run(close_1d, window=20)
+    width = bbands.bandwidth
+    width.columns = width.columns.droplevel('bb_window')
+    width = width.shift(1)
+    return width
 
 # 使用 groupby 按 date 分组，并计算每组的 coin_pair 数量
 # coin_pair_stats_by_date = df_filtered.groupby('date').agg(
@@ -161,6 +169,8 @@ def entry_signal():
     return mask_final
 
 mask = entry_signal()
+# slope_df = cal_squeeze(close_1d)
+width = cal_width(close_1d)
 
 def exit_signal(mask):
     btc_close_1d = close['BTC_USDT'].resample('D').last()
@@ -249,24 +259,15 @@ for date, signals_on_date in mask.iterrows():  # 遍历 mask 中的每个日期�
         entry_date = holdings[coin_pair]['entry_date']
         entry_price = holdings[coin_pair]['entry_price']
         exit_size = holdings[coin_pair]['size']
-        # 检查当前价格是否下跌至入场价格的50%
         current_price = close.at[date, coin_pair]
         
         # if current_price <= 0.5 * entry_price or is_breakdown.at[date, coin_pair]:
-        # if is_breakdown.at[date, coin_pair]:
-        #     update_capital_and_exit(date, coin_pair, current_price, exit_size)
-        #     print(coin_pair, "update exit size cas low10",capital_df.loc[date])
-        #     continue
-
-        # 检查持仓是否已满3天
-        # if date - entry_date >= Timedelta(days=2):
-        #     exit_date = (entry_date + Timedelta(days=3)).normalize()
-        #     exits.at[exit_date, coin_pair] = True  # 在第三天的00:00设置退出信号
-        #     print("持仓币对：",list(holdings.keys()))
-        #     del holdings[coin_pair]  # 移除币对
+        if is_breakdown.at[date, coin_pair]:
+            update_capital_and_exit(date, coin_pair, current_price, exit_size)
+            print(coin_pair, "update exit size cas low21",capital_df.loc[date])
 
         # 检查exits_filter在此日期和币对下的值是否为True
-        if exits_filter.at[date, coin_pair]:
+        elif exits_filter.at[date, coin_pair]:
             update_capital_and_exit(date, coin_pair, current_price, exit_size)
             print(f"{coin_pair} exit because BTC is below MA50", capital_df.loc[date])
 
@@ -278,9 +279,12 @@ for date, signals_on_date in mask.iterrows():  # 遍历 mask 中的每个日期�
     if not signals or len(holdings) >= 10:
         continue
     date_daily = pd.to_datetime(date).normalize() # 将 mask 的按小时日期转换为按天日期，以便与 df_filtered 对齐
+    # widths_on_date = width.loc[date_daily, signals]
+    # sorted_widths = sorted(widths_on_date.items(), key=lambda x: x[1])
+    # sorted_signals = [signal for signal, _ in sorted_widths]    
     rank_on_date = df_filtered[df_filtered['date'] == date_daily]
     rank_on_date = rank_on_date[rank_on_date['coin_pair'].isin(signals)]
-    sorted_signals = rank_on_date.sort_values('rank')['coin_pair'].tolist()  # 使用 df_filtered 来确定这些币对的入场顺序
+    sorted_signals = rank_on_date.sort_values('rank')['coin_pair'].tolist()
 
     for coin_pair in sorted_signals:
         if len(holdings) < 10 and coin_pair not in holdings and coin_pair not in exited_coins:
