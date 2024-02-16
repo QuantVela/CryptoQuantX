@@ -18,12 +18,6 @@ import pandas_ta as pta
 from technical import qtpylib
 import logging
 
-# 策略规则：
-# 币对筛选：3 日累计成交量前 36 个，去除稳定币和 BTC
-# 进场：突破 30 日内最高价，且 BTC > MA50
-# 出场：BTC < MA50 或第三天收盘时
-# 资金均分 10 份，最多持仓 10 个币
-
 logger = logging.getLogger(__name__)
 
 class Break1h(IStrategy):
@@ -219,7 +213,7 @@ class Break1h(IStrategy):
         #             return stake_amount
         #     except Exception as exception:
         #         return None        
-        return None
+        # return None
 
     # use_custom_stoploss = True
 
