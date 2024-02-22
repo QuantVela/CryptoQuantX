@@ -34,7 +34,8 @@ def update_prices():
     for sheet_name in sheets:
         gsheet = client.open("freqtrade tradelog").worksheet(sheet_name)
         time.sleep(30)
-        records = gsheet.get_all_records()
+        expected_headers = ['ID', '交易币对', '买入时间', '买入价格', '买入数量', '加仓 1 买入价格', '加仓 1 买入数量', '加仓 2 买入价格', '加仓 2 买入数量' ,'U 数量', '卖出时间' ,'卖出价格', '卖出数量', '卖出原因', 'Fees',	'PnL', '总资金', 'PnL Ratio', '单笔收益率', '当前价格', '未平仓盈亏', '未平仓盈亏%', 'WIN/LOSS'] 
+        records = gsheet.get_all_records(expected_headers=expected_headers)
 
         for i, record in enumerate(records, start=2): 
             symbol = record.get('交易币对', '').replace('/', '') # 例如：将"SUI/USDT"转换为"SUIUSDT"
@@ -176,6 +177,8 @@ def add_tradelog():
         else:
             return jsonify({"error": "Trade ID not found"}), 404
 
+    return jsonify({"message": "No new trades for now"}), 200
+    
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=update_prices, trigger="interval", minutes=5, next_run_time=datetime.now())
 scheduler.start()
