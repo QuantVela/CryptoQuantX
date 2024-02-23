@@ -1,0 +1,898 @@
+{
+    "pinned": {
+        "tweet_id": "1760837880836956360",
+        "bookmarks": 71,
+        "created_at": "Fri Feb 23 01:24:00 +0000 2024",
+        "favorites": 393,
+        "text": "Jan 24 @Mirrorlyxyz Top Traders Report is Out! \n\nWatch me own the leaderboard with a Grand Total of **TWO CLOSING** trades.\n\nAs I swept the sand mandala of my old positions, I rebuilt and DCA 6 core positions in $ALT $ONDO $BLUR $DYDX $ETHBTC $ETH (CoinM) all of which were once… https://t.co/EX2apHl35G",
+        "lang": "en",
+        "views": "78702",
+        "quotes": 1,
+        "replies": 54,
+        "retweets": 18,
+        "conversation_id": "1760837880836956360",
+        "media": {
+            "photo": [
+                {
+                    "media_url_https": "https://pbs.twimg.com/media/GG_AtziWUAAdRRz.jpg"
+                },
+                {
+                    "media_url_https": "https://pbs.twimg.com/media/GG_AtzgWYAAxBC8.jpg"
+                },
+                {
+                    "media_url_https": "https://pbs.twimg.com/media/GG_AtzeXMAAmSqj.jpg"
+                }
+            ]
+        },
+        "author": {
+            "rest_id": "1641995815983140865",
+            "name": "smartestmoney.eth",
+            "screen_name": "smartestmoney_",
+            "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+            "blue_verified": true
+        },
+        "quoted": {
+            "tweet_id": "1760605722172063967",
+            "bookmarks": 11,
+            "created_at": "Thu Feb 22 10:01:29 +0000 2024",
+            "favorites": 33,
+            "text": "In case you are not following our blog yet.. Top Traders Report - Jan '24 is out! \n\nFeaturing, as always, the very best of the Binance Leaderboard:\n\n🏆@smartestmoney_\n🥈MetaWeb_Amos\n🥉mngltrds\n\nThis time we see who weathered the storm during the BTC ETF in January ☁️",
+            "lang": "en",
+            "views": "82848",
+            "quotes": 4,
+            "replies": 4,
+            "retweets": 3,
+            "conversation_id": "1760605722172063967",
+            "author": {
+                "rest_id": "1681585038457024514",
+                "name": "Mirrorly",
+                "screen_name": "Mirrorlyxyz",
+                "avatar": "https://pbs.twimg.com/profile_images/1681585917734055936/RBres8AR_normal.jpg",
+                "blue_verified": true
+            },
+            "media": []
+        }
+    },
+    "timeline": [
+        {
+            "tweet_id": "1760944446097817609",
+            "bookmarks": 0,
+            "created_at": "Fri Feb 23 08:27:27 +0000 2024",
+            "favorites": 0,
+            "text": "RT @0xAnteater: gcr graced us for years with how he thinks about the market\n\nand the first thing toxic influencers do when he comes back on…",
+            "lang": "en",
+            "views": null,
+            "quotes": 0,
+            "replies": 0,
+            "retweets": 14,
+            "conversation_id": "1760944446097817609",
+            "media": [],
+            "author": {
+                "rest_id": "1641995815983140865",
+                "name": "smartestmoney.eth",
+                "screen_name": "smartestmoney_",
+                "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                "blue_verified": true
+            },
+            "retweeted": {
+                "id": "1760939237506269343"
+            },
+            "retweeted_tweet": {
+                "tweet_id": "1760939237506269343",
+                "bookmarks": 16,
+                "created_at": "Fri Feb 23 08:06:45 +0000 2024",
+                "favorites": 263,
+                "text": "gcr graced us for years with how he thinks about the market\n\nand the first thing toxic influencers do when he comes back on a public tg is to spread a false narrative that he is shorting?\n\na nascent asset class that just had its defining moment?\n\ngrow up",
+                "lang": "en",
+                "quotes": 2,
+                "replies": 24,
+                "retweets": 14,
+                "conversation_id": "1760939237506269343",
+                "author": {
+                    "rest_id": "1004220018",
+                    "name": "Anteater",
+                    "screen_name": "0xAnteater",
+                    "avatar": "https://pbs.twimg.com/profile_images/1629861412431605761/lk5IApjA_normal.jpg",
+                    "blue_verified": true
+                },
+                "media": []
+            }
+        },
+        {
+            "tweet_id": "1760898222577348861",
+            "bookmarks": 0,
+            "created_at": "Fri Feb 23 05:23:46 +0000 2024",
+            "favorites": 0,
+            "text": "RT @zachxbt: @blknoiz06 Trying to dunk on the someone who made 8 figs over past few weeks publicly probably isn’t the best idea.",
+            "lang": "en",
+            "views": null,
+            "quotes": 0,
+            "replies": 0,
+            "retweets": 30,
+            "conversation_id": "1760898222577348861",
+            "media": [],
+            "author": {
+                "rest_id": "1641995815983140865",
+                "name": "smartestmoney.eth",
+                "screen_name": "smartestmoney_",
+                "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                "blue_verified": true
+            },
+            "retweeted": {
+                "id": "1760886970635465205"
+            },
+            "retweeted_tweet": {
+                "tweet_id": "1760886970635465205",
+                "bookmarks": 15,
+                "created_at": "Fri Feb 23 04:39:04 +0000 2024",
+                "favorites": 1430,
+                "text": "@blknoiz06 Trying to dunk on the someone who made 8 figs over past few weeks publicly probably isn’t the best idea.",
+                "lang": "en",
+                "quotes": 2,
+                "replies": 72,
+                "retweets": 30,
+                "conversation_id": "1760883423508652226",
+                "author": {
+                    "rest_id": "3012852462",
+                    "name": "ZachXBT",
+                    "screen_name": "zachxbt",
+                    "avatar": "https://pbs.twimg.com/profile_images/1741515110496018432/6kc_EJTk_normal.jpg",
+                    "blue_verified": true
+                },
+                "media": []
+            }
+        },
+        {
+            "tweet_id": "1760884243671155152",
+            "bookmarks": 21,
+            "created_at": "Fri Feb 23 04:28:13 +0000 2024",
+            "favorites": 468,
+            "text": "Thanks for the engagement LMAO exactly what i needed as i approach the 9 fig PNL BROOOOOO\n\nYou chose the quote retweet as i expected instead of the reply LOLOLOL",
+            "lang": "en",
+            "views": "205814",
+            "quotes": 6,
+            "replies": 44,
+            "retweets": 4,
+            "conversation_id": "1760884243671155152",
+            "media": [],
+            "quoted": {
+                "tweet_id": "1760883423508652226",
+                "bookmarks": 19,
+                "created_at": "Fri Feb 23 04:24:58 +0000 2024",
+                "favorites": 223,
+                "text": "bro flexing a -40% drawdown after a 10x LMAOOOOOOOOOOOOO",
+                "lang": "en",
+                "views": "257219",
+                "quotes": 2,
+                "replies": 71,
+                "retweets": 11,
+                "conversation_id": "1760883423508652226",
+                "author": {
+                    "rest_id": "1641995815983140865",
+                    "name": "smartestmoney.eth",
+                    "screen_name": "smartestmoney_",
+                    "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                    "blue_verified": true
+                },
+                "media": []
+            }
+        },
+        {
+            "tweet_id": "1760884389846904833",
+            "bookmarks": 3,
+            "created_at": "Fri Feb 23 04:28:48 +0000 2024",
+            "favorites": 196,
+            "text": "so fucking predictable with these charlatans LMAO",
+            "lang": "en",
+            "views": "22136",
+            "quotes": 0,
+            "replies": 7,
+            "retweets": 2,
+            "conversation_id": "1760884243671155152",
+            "media": [],
+            "reply_to": "1760884243671155152"
+        },
+        {
+            "tweet_id": "1760882361770905801",
+            "bookmarks": 15,
+            "created_at": "Fri Feb 23 04:20:45 +0000 2024",
+            "favorites": 183,
+            "text": "$SOL $WIF $SOLETH $SOLBTC",
+            "lang": "qct",
+            "views": "45466",
+            "quotes": 0,
+            "replies": 18,
+            "retweets": 5,
+            "conversation_id": "1760882361770905801",
+            "media": [],
+            "author": {
+                "rest_id": "1641995815983140865",
+                "name": "smartestmoney.eth",
+                "screen_name": "smartestmoney_",
+                "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                "blue_verified": true
+            },
+            "quoted": {
+                "tweet_id": "1760833578278207843",
+                "bookmarks": 2,
+                "created_at": "Fri Feb 23 01:06:54 +0000 2024",
+                "favorites": 54,
+                "text": "@ellepleurenft @BigDickBull69 @blknoiz06 Remember now the Hat Stays On!\neven on the Euthanasia Coaster https://t.co/CCPKmKUzHE",
+                "lang": "en",
+                "views": "51115",
+                "quotes": 2,
+                "replies": 3,
+                "retweets": 1,
+                "conversation_id": "1760819293736870261",
+                "author": {
+                    "rest_id": "1641995815983140865",
+                    "name": "smartestmoney.eth",
+                    "screen_name": "smartestmoney_",
+                    "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                    "blue_verified": true
+                },
+                "media": {
+                    "photo": [
+                        {
+                            "media_url_https": "https://pbs.twimg.com/media/GG-8zSiaEAAxPSd.jpg"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "tweet_id": "1760842092232724740",
+            "bookmarks": 0,
+            "created_at": "Fri Feb 23 01:40:44 +0000 2024",
+            "favorites": 0,
+            "text": "RT @smartestmoney_: @MongolMode you didn’t get the memo?\n\nlatest $ETH beta is $ONDO $ALT",
+            "lang": "en",
+            "views": null,
+            "quotes": 0,
+            "replies": 0,
+            "retweets": 4,
+            "conversation_id": "1760842092232724740",
+            "media": [],
+            "author": {
+                "rest_id": "1641995815983140865",
+                "name": "smartestmoney.eth",
+                "screen_name": "smartestmoney_",
+                "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                "blue_verified": true
+            },
+            "retweeted": {
+                "id": "1760828754631508462"
+            },
+            "retweeted_tweet": {
+                "tweet_id": "1760828754631508462",
+                "bookmarks": 8,
+                "created_at": "Fri Feb 23 00:47:44 +0000 2024",
+                "favorites": 89,
+                "text": "@MongolMode you didn’t get the memo?\n\nlatest $ETH beta is $ONDO $ALT",
+                "lang": "en",
+                "quotes": 1,
+                "replies": 5,
+                "retweets": 4,
+                "conversation_id": "1760819293736870261",
+                "author": {
+                    "rest_id": "1641995815983140865",
+                    "name": "smartestmoney.eth",
+                    "screen_name": "smartestmoney_",
+                    "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                    "blue_verified": true
+                },
+                "media": []
+            }
+        },
+        {
+            "tweet_id": "1760819293736870261",
+            "bookmarks": 28,
+            "created_at": "Fri Feb 23 00:10:08 +0000 2024",
+            "favorites": 261,
+            "text": "The definition of insanity is repeatedly trying to long $ETHBTC when longing $SOLETH is the much better trade in a bullish environment 🤮🤢\n\nhttps://t.co/eShJQmvtTF https://t.co/CA9ox7kjaE",
+            "lang": "en",
+            "views": "277929",
+            "quotes": 3,
+            "replies": 31,
+            "retweets": 9,
+            "conversation_id": "1760819293736870261",
+            "media": {
+                "photo": [
+                    {
+                        "media_url_https": "https://pbs.twimg.com/media/GG-vz0UXIAAQSzh.jpg"
+                    }
+                ]
+            },
+            "author": {
+                "rest_id": "1641995815983140865",
+                "name": "smartestmoney.eth",
+                "screen_name": "smartestmoney_",
+                "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                "blue_verified": true
+            },
+            "quoted": {
+                "tweet_id": "1760191642903171489",
+                "bookmarks": 11,
+                "created_at": "Wed Feb 21 06:36:05 +0000 2024",
+                "favorites": 133,
+                "text": "Time stamped on 30/01/2024\n\nLet’s leave the trading to the real traders. https://t.co/b5RfHR99ue",
+                "lang": "en",
+                "views": "135148",
+                "quotes": 1,
+                "replies": 17,
+                "retweets": 6,
+                "conversation_id": "1760188858854211942",
+                "author": {
+                    "rest_id": "1641995815983140865",
+                    "name": "smartestmoney.eth",
+                    "screen_name": "smartestmoney_",
+                    "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                    "blue_verified": true
+                },
+                "media": {
+                    "photo": [
+                        {
+                            "media_url_https": "https://pbs.twimg.com/media/GG109rRa8AA3mcx.jpg"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "tweet_id": "1760727062040695102",
+            "bookmarks": 0,
+            "created_at": "Thu Feb 22 18:03:38 +0000 2024",
+            "favorites": 0,
+            "text": "RT @SpiderCrypto0x: CT is an edge. This platform and knowing who to follow will give you the alpha you need to succeed. \n\nExample for me on…",
+            "lang": "en",
+            "views": null,
+            "quotes": 0,
+            "replies": 0,
+            "retweets": 7,
+            "conversation_id": "1760727062040695102",
+            "media": [],
+            "author": {
+                "rest_id": "1641995815983140865",
+                "name": "smartestmoney.eth",
+                "screen_name": "smartestmoney_",
+                "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                "blue_verified": true
+            },
+            "retweeted": {
+                "id": "1760723857663741987"
+            },
+            "retweeted_tweet": {
+                "tweet_id": "1760723857663741987",
+                "bookmarks": 39,
+                "created_at": "Thu Feb 22 17:50:54 +0000 2024",
+                "favorites": 141,
+                "text": "CT is an edge. This platform and knowing who to follow will give you the alpha you need to succeed. \n\nExample for me on my longs, following @smartestmoney_ helped with $ondo. Following @QuantMeta helped with $wld, following @blknoiz06 helped with $fil.\n\nGood ct influencer is gem",
+                "lang": "en",
+                "quotes": 0,
+                "replies": 10,
+                "retweets": 7,
+                "conversation_id": "1760723857663741987",
+                "author": {
+                    "rest_id": "1295766451530293249",
+                    "name": "SpiderCrypto 🧑‍🍳|",
+                    "screen_name": "SpiderCrypto0x",
+                    "avatar": "https://pbs.twimg.com/profile_images/1734713553066889216/leiLl3F9_normal.jpg",
+                    "blue_verified": true
+                },
+                "media": []
+            }
+        },
+        {
+            "tweet_id": "1760648691684364549",
+            "bookmarks": 0,
+            "created_at": "Thu Feb 22 12:52:14 +0000 2024",
+            "favorites": 0,
+            "text": "RT @HsakaTrades: @saliencexbt this was in the charts https://t.co/2xLyjOgjxO",
+            "lang": "en",
+            "views": null,
+            "quotes": 0,
+            "replies": 0,
+            "retweets": 19,
+            "conversation_id": "1760648691684364549",
+            "media": {
+                "photo": [
+                    {
+                        "media_url_https": "https://pbs.twimg.com/media/GG8QeCiWkAA4hcO.jpg"
+                    }
+                ]
+            },
+            "author": {
+                "rest_id": "1641995815983140865",
+                "name": "smartestmoney.eth",
+                "screen_name": "smartestmoney_",
+                "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                "blue_verified": true
+            },
+            "retweeted": {
+                "id": "1760644147537379731"
+            },
+            "retweeted_tweet": {
+                "tweet_id": "1760644147537379731",
+                "bookmarks": 7,
+                "created_at": "Thu Feb 22 12:34:10 +0000 2024",
+                "favorites": 202,
+                "text": "@saliencexbt this was in the charts https://t.co/2xLyjOgjxO",
+                "lang": "en",
+                "quotes": 12,
+                "replies": 30,
+                "retweets": 19,
+                "conversation_id": "1760642793586774511",
+                "author": {
+                    "rest_id": "944686196331966464",
+                    "name": "Hsaka",
+                    "screen_name": "HsakaTrades",
+                    "avatar": "https://pbs.twimg.com/profile_images/1690929913270792192/6n-PzBnB_normal.jpg",
+                    "blue_verified": false
+                },
+                "media": {
+                    "photo": [
+                        {
+                            "media_url_https": "https://pbs.twimg.com/media/GG8QeCiWkAA4hcO.jpg"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "tweet_id": "1760640399344029951",
+            "bookmarks": 0,
+            "created_at": "Thu Feb 22 12:19:16 +0000 2024",
+            "favorites": 0,
+            "text": "RT @Crypto_McKenna: Polite reminder the $ETH weekly chart looks like this whilst ETHBTC has barely moved from it's lows.\n\nCombine spot ETF…",
+            "lang": "en",
+            "views": null,
+            "quotes": 0,
+            "replies": 0,
+            "retweets": 25,
+            "conversation_id": "1760640399344029951",
+            "media": [],
+            "author": {
+                "rest_id": "1641995815983140865",
+                "name": "smartestmoney.eth",
+                "screen_name": "smartestmoney_",
+                "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                "blue_verified": true
+            },
+            "retweeted": {
+                "id": "1760590130719420819"
+            },
+            "retweeted_tweet": {
+                "tweet_id": "1760590130719420819",
+                "bookmarks": 17,
+                "created_at": "Thu Feb 22 08:59:32 +0000 2024",
+                "favorites": 313,
+                "text": "Polite reminder the $ETH weekly chart looks like this whilst ETHBTC has barely moved from it's lows.\n\nCombine spot ETF narrative along with demand side for restaking airdrop farming then I think Ethereum continues to see a violent re-rating to the upside.\n\nLong and strong. https://t.co/Y34qnvSl4O",
+                "lang": "en",
+                "quotes": 3,
+                "replies": 23,
+                "retweets": 25,
+                "conversation_id": "1760590130719420819",
+                "author": {
+                    "rest_id": "948974801737134080",
+                    "name": "McKenna",
+                    "screen_name": "Crypto_McKenna",
+                    "avatar": "https://pbs.twimg.com/profile_images/1744942017560358912/yVPo5UbA_normal.jpg",
+                    "blue_verified": true
+                },
+                "media": {
+                    "photo": [
+                        {
+                            "media_url_https": "https://pbs.twimg.com/media/GG7e0VRXIAAo-XZ.jpg"
+                        },
+                        {
+                            "media_url_https": "https://pbs.twimg.com/media/GG7e4qgWIAA0_of.jpg"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "tweet_id": "1760602139850686685",
+            "bookmarks": 0,
+            "created_at": "Thu Feb 22 09:47:15 +0000 2024",
+            "favorites": 0,
+            "text": "RT @jzszn: Yo @smartestmoney_ , they was hating on your boy when i showed them the way. \n\nWe have a (b?)illionaire trading 10s of millions…",
+            "lang": "en",
+            "views": null,
+            "quotes": 0,
+            "replies": 0,
+            "retweets": 5,
+            "conversation_id": "1760602139850686685",
+            "media": [],
+            "author": {
+                "rest_id": "1641995815983140865",
+                "name": "smartestmoney.eth",
+                "screen_name": "smartestmoney_",
+                "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                "blue_verified": true
+            },
+            "retweeted": {
+                "id": "1760592465491591318"
+            },
+            "retweeted_tweet": {
+                "tweet_id": "1760592465491591318",
+                "bookmarks": 16,
+                "created_at": "Thu Feb 22 09:08:48 +0000 2024",
+                "favorites": 192,
+                "text": "Yo @smartestmoney_ , they was hating on your boy when i showed them the way. \n\nWe have a (b?)illionaire trading 10s of millions publicly on binance with 85% win rate, what else do they need?\n\nAlmost 2x on $ONDO $BLUR $ALT &amp; we are only getting started. LFG",
+                "lang": "en",
+                "quotes": 0,
+                "replies": 10,
+                "retweets": 5,
+                "conversation_id": "1760592465491591318",
+                "author": {
+                    "rest_id": "421282350",
+                    "name": "jz",
+                    "screen_name": "jzszn",
+                    "avatar": "https://pbs.twimg.com/profile_images/1740258296332959744/6Jvacp8n_normal.jpg",
+                    "blue_verified": false
+                },
+                "media": []
+            }
+        },
+        {
+            "tweet_id": "1760589523841630620",
+            "bookmarks": 0,
+            "created_at": "Thu Feb 22 08:57:07 +0000 2024",
+            "favorites": 0,
+            "text": "RT @smartestmoney_: @ymittal_NFT @RunnerXBT HTF only requires one thing - patience.\n\nAll you need to learn is to do nothing.\n\nFree your min…",
+            "lang": "en",
+            "views": null,
+            "quotes": 0,
+            "replies": 0,
+            "retweets": 27,
+            "conversation_id": "1760589523841630620",
+            "media": [],
+            "author": {
+                "rest_id": "1641995815983140865",
+                "name": "smartestmoney.eth",
+                "screen_name": "smartestmoney_",
+                "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                "blue_verified": true
+            },
+            "retweeted": {
+                "id": "1760579955791147367"
+            },
+            "retweeted_tweet": {
+                "tweet_id": "1760579955791147367",
+                "bookmarks": 26,
+                "created_at": "Thu Feb 22 08:19:06 +0000 2024",
+                "favorites": 185,
+                "text": "@ymittal_NFT @RunnerXBT HTF only requires one thing - patience.\n\nAll you need to learn is to do nothing.\n\nFree your mind.\n\nLess is more.",
+                "lang": "en",
+                "quotes": 0,
+                "replies": 17,
+                "retweets": 27,
+                "conversation_id": "1758034269375435211",
+                "author": {
+                    "rest_id": "1641995815983140865",
+                    "name": "smartestmoney.eth",
+                    "screen_name": "smartestmoney_",
+                    "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                    "blue_verified": true
+                },
+                "media": []
+            }
+        },
+        {
+            "tweet_id": "1760529944000831948",
+            "bookmarks": 26,
+            "created_at": "Thu Feb 22 05:00:22 +0000 2024",
+            "favorites": 457,
+            "text": "The CONDO from my $ONDO keeps ascending each day.\n\nDid you get in on the ground floor like I told you to? https://t.co/vjDgcoqrdU",
+            "lang": "en",
+            "views": "93461",
+            "quotes": 4,
+            "replies": 47,
+            "retweets": 17,
+            "conversation_id": "1760529944000831948",
+            "media": {
+                "photo": [
+                    {
+                        "media_url_https": "https://pbs.twimg.com/media/GG6opebWMAAqSYE.jpg"
+                    },
+                    {
+                        "media_url_https": "https://pbs.twimg.com/media/GG6opebWEAAyhpg.jpg"
+                    }
+                ]
+            },
+            "author": {
+                "rest_id": "1641995815983140865",
+                "name": "smartestmoney.eth",
+                "screen_name": "smartestmoney_",
+                "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                "blue_verified": true
+            },
+            "quoted": {
+                "tweet_id": "1759075212665192496",
+                "bookmarks": 16,
+                "created_at": "Sun Feb 18 04:39:47 +0000 2024",
+                "favorites": 370,
+                "text": "Stop asking for TP\n\nTarget for $ONDO is a CONDO https://t.co/fYJL2Zfgp0",
+                "lang": "en",
+                "views": "162018",
+                "quotes": 9,
+                "replies": 27,
+                "retweets": 19,
+                "conversation_id": "1759075212665192496",
+                "author": {
+                    "rest_id": "1641995815983140865",
+                    "name": "smartestmoney.eth",
+                    "screen_name": "smartestmoney_",
+                    "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                    "blue_verified": true
+                },
+                "media": {
+                    "photo": [
+                        {
+                            "media_url_https": "https://pbs.twimg.com/media/GGl9is_aUAAscAk.jpg"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "tweet_id": "1760516179234615357",
+            "bookmarks": 24,
+            "created_at": "Thu Feb 22 04:05:40 +0000 2024",
+            "favorites": 210,
+            "text": "Harsh Truths.\n\nEmbrace the mental illness.\n\nLearn to monetize them.",
+            "lang": "en",
+            "views": "40040",
+            "quotes": 1,
+            "replies": 9,
+            "retweets": 18,
+            "conversation_id": "1760516179234615357",
+            "media": [],
+            "author": {
+                "rest_id": "1641995815983140865",
+                "name": "smartestmoney.eth",
+                "screen_name": "smartestmoney_",
+                "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                "blue_verified": true
+            },
+            "quoted": {
+                "tweet_id": "1760312604193382612",
+                "bookmarks": 241,
+                "created_at": "Wed Feb 21 14:36:44 +0000 2024",
+                "favorites": 2269,
+                "text": "Welcome to crypto twitter https://t.co/aKZ6GeznhU",
+                "lang": "en",
+                "views": "239225",
+                "quotes": 98,
+                "replies": 221,
+                "retweets": 450,
+                "conversation_id": "1760312604193382612",
+                "author": {
+                    "rest_id": "3159122144",
+                    "name": "Gabriel Haines.⌐◨-◨",
+                    "screen_name": "gabrielhaines",
+                    "avatar": "https://pbs.twimg.com/profile_images/1684331571795443713/5S3Ocdxm_normal.jpg",
+                    "blue_verified": true
+                },
+                "media": {
+                    "video": [
+                        {
+                            "media_url_https": "https://pbs.twimg.com/amplify_video_thumb/1760312477353480192/img/nNjYiNYGQ8AFAZnx.jpg",
+                            "variants": [
+                                {
+                                    "bitrate": 2176000,
+                                    "content_type": "video/mp4",
+                                    "url": "https://video.twimg.com/amplify_video/1760312477353480192/vid/avc1/720x1280/_ynFD2UQKtvwLZlI.mp4?tag=14"
+                                },
+                                {
+                                    "bitrate": 950000,
+                                    "content_type": "video/mp4",
+                                    "url": "https://video.twimg.com/amplify_video/1760312477353480192/vid/avc1/480x852/yR73ECfImuua00Yb.mp4?tag=14"
+                                },
+                                {
+                                    "content_type": "application/x-mpegURL",
+                                    "url": "https://video.twimg.com/amplify_video/1760312477353480192/pl/RNhcqMn3fYiS8sT0.m3u8?tag=14&container=cmaf"
+                                },
+                                {
+                                    "bitrate": 632000,
+                                    "content_type": "video/mp4",
+                                    "url": "https://video.twimg.com/amplify_video/1760312477353480192/vid/avc1/320x568/6pods3eNiCOjbodD.mp4?tag=14"
+                                }
+                            ],
+                            "aspect_ratio": [
+                                9,
+                                16
+                            ],
+                            "original_info": {
+                                "height": 1920,
+                                "width": 1080,
+                                "focus_rects": []
+                            },
+                            "id": "1760312477353480192"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "tweet_id": "1760512416260223085",
+            "bookmarks": 5,
+            "created_at": "Thu Feb 22 03:50:43 +0000 2024",
+            "favorites": 91,
+            "text": "$SOL/ $ETH trades getting more popular also crushes $ETHBTC https://t.co/vIamyY1Hln",
+            "lang": "en",
+            "views": "30632",
+            "quotes": 0,
+            "replies": 5,
+            "retweets": 4,
+            "conversation_id": "1760512416260223085",
+            "media": {
+                "photo": [
+                    {
+                        "media_url_https": "https://pbs.twimg.com/media/GG6YtRCaAAANRu2.jpg"
+                    }
+                ]
+            },
+            "author": {
+                "rest_id": "1641995815983140865",
+                "name": "smartestmoney.eth",
+                "screen_name": "smartestmoney_",
+                "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                "blue_verified": true
+            },
+            "quoted": {
+                "tweet_id": "1760503975374434510",
+                "bookmarks": 9,
+                "created_at": "Thu Feb 22 03:17:10 +0000 2024",
+                "favorites": 254,
+                "text": "SOL/ETH is one of the stone cold most bearish charts I have ever seen in my 3 and a half decades in this industry. Absolute garbage.",
+                "lang": "en",
+                "views": "60320",
+                "quotes": 6,
+                "replies": 34,
+                "retweets": 4,
+                "conversation_id": "1760503975374434510",
+                "author": {
+                    "rest_id": "1550232757011468289",
+                    "name": "BIG DICK BULL (BDB)",
+                    "screen_name": "BigDickBull69",
+                    "avatar": "https://pbs.twimg.com/profile_images/1736883590682619904/LvBzWYy6_normal.jpg",
+                    "blue_verified": true
+                },
+                "media": []
+            }
+        },
+        {
+            "tweet_id": "1760188858854211942",
+            "bookmarks": 35,
+            "created_at": "Wed Feb 21 06:25:01 +0000 2024",
+            "favorites": 365,
+            "text": "If you think $ETHBTC will go up, SOLBTC will go up more.\n\nPrevious cycle traders need to adapt with the times.\n\n$SOL",
+            "lang": "en",
+            "views": "88139",
+            "quotes": 4,
+            "replies": 20,
+            "retweets": 18,
+            "conversation_id": "1760188858854211942",
+            "media": [],
+            "quoted": {
+                "tweet_id": "1760121992676794746",
+                "bookmarks": 12,
+                "created_at": "Wed Feb 21 01:59:19 +0000 2024",
+                "favorites": 492,
+                "text": "2024 Returns \n\nBTC: 24%\nETH: 33%\nSOL: -3%",
+                "lang": "en",
+                "views": "150261",
+                "quotes": 12,
+                "replies": 34,
+                "retweets": 25,
+                "conversation_id": "1760121992676794746",
+                "author": {
+                    "rest_id": "1641995815983140865",
+                    "name": "smartestmoney.eth",
+                    "screen_name": "smartestmoney_",
+                    "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                    "blue_verified": true
+                },
+                "media": []
+            }
+        },
+        {
+            "tweet_id": "1760189878653132890",
+            "bookmarks": 4,
+            "created_at": "Wed Feb 21 06:29:04 +0000 2024",
+            "favorites": 73,
+            "text": "For context, just in case i start pumping $SOL \n\nBut are these previous cycle traders with you in this room right now? https://t.co/RHmknVE8NS",
+            "lang": "en",
+            "views": "23641",
+            "quotes": 2,
+            "replies": 4,
+            "retweets": 2,
+            "conversation_id": "1760188858854211942",
+            "media": {
+                "photo": [
+                    {
+                        "media_url_https": "https://pbs.twimg.com/media/GG1zW4NaAAAsc0t.jpg"
+                    }
+                ]
+            },
+            "reply_to": "1760188858854211942"
+        },
+        {
+            "tweet_id": "1760191642903171489",
+            "bookmarks": 11,
+            "created_at": "Wed Feb 21 06:36:05 +0000 2024",
+            "favorites": 133,
+            "text": "Time stamped on 30/01/2024\n\nLet’s leave the trading to the real traders. https://t.co/b5RfHR99ue",
+            "lang": "en",
+            "views": "135148",
+            "quotes": 1,
+            "replies": 17,
+            "retweets": 6,
+            "conversation_id": "1760188858854211942",
+            "media": {
+                "photo": [
+                    {
+                        "media_url_https": "https://pbs.twimg.com/media/GG109rRa8AA3mcx.jpg"
+                    }
+                ]
+            },
+            "reply_to": "1760189878653132890"
+        },
+        {
+            "tweet_id": "1760178158215860498",
+            "bookmarks": 0,
+            "created_at": "Wed Feb 21 05:42:30 +0000 2024",
+            "favorites": 0,
+            "text": "RT @smartestmoney_: @_sisma_ @comfortablylong @RomanGodPluto_ Puts on Deribit perhaps. USDM to short is ok. I keep CoinM for LONG ONLY due…",
+            "lang": "en",
+            "views": "1",
+            "quotes": 0,
+            "replies": 0,
+            "retweets": 2,
+            "conversation_id": "1760178158215860498",
+            "media": [],
+            "author": {
+                "rest_id": "1641995815983140865",
+                "name": "smartestmoney.eth",
+                "screen_name": "smartestmoney_",
+                "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                "blue_verified": true
+            },
+            "retweeted": {
+                "id": "1760174841905483931"
+            },
+            "retweeted_tweet": {
+                "tweet_id": "1760174841905483931",
+                "bookmarks": 5,
+                "created_at": "Wed Feb 21 05:29:19 +0000 2024",
+                "favorites": 35,
+                "text": "@_sisma_ @comfortablylong @RomanGodPluto_ Puts on Deribit perhaps. USDM to short is ok. I keep CoinM for LONG ONLY due to the nature of the collateral.",
+                "lang": "en",
+                "quotes": 1,
+                "replies": 2,
+                "retweets": 2,
+                "conversation_id": "1760133851089875004",
+                "author": {
+                    "rest_id": "1641995815983140865",
+                    "name": "smartestmoney.eth",
+                    "screen_name": "smartestmoney_",
+                    "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+                    "blue_verified": true
+                },
+                "media": []
+            }
+        }
+    ],
+    "next_cursor": "DAABCgABGHBEuvm__-cKAAIYbWi1hduREggAAwAAAAIAAA",
+    "user": {
+        "profile": "smartestmoney_",
+        "id": "1641995815983140865",
+        "avatar": "https://pbs.twimg.com/profile_images/1748215940339437568/GEMtUguP_normal.jpg",
+        "desc": "#1 CoinM PnL trader on @binance leaderboard. Road to 9 figs challenge with receipts @ https://t.co/XekZRIx2kU",
+        "name": "smartestmoney.eth",
+        "friends": 494,
+        "sub_count": 60655
+    }
+}
