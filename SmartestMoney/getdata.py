@@ -2,8 +2,10 @@ import requests
 import json
 from sqlalchemy import create_engine, Column, Integer, Float, String, Boolean, UniqueConstraint
 from sqlalchemy.orm import declarative_base, sessionmaker
+from datetime import datetime
 import time
 
+# API: https://rapidapi.com/DevNullZero/api/binance-futures-leaderboard1
 # 可参考项目
 # https://github.com/tpmmthomas/binance-copy-trade-bot/blob/14133d86434271aae20a1a06b9e926350c33213e/Binance/bparser.py
 # https://github.com/DogeIII/Binance-Leaderboard-CopyTrading/blob/main/bot.py
@@ -27,11 +29,20 @@ class Position(Base):
     yellow = Column(Boolean)
     tradeBefore = Column(Boolean)
     leverage = Column(Integer)
+    source = Column(String)
+
+class TweetUpdateTime(Base):
+    __tablename__ = 'tweet_update_time'
+
+    id = Column(Integer, primary_key=True)
+    updateTimeStamp = Column(Integer, unique=True)
+    updateTime = Column(String)
 
 def init_db():
     Base.metadata.create_all(engine)
 
 def retrieve_positions(tradeType):
+    '''获取排行榜里的仓位信息'''
     try:
         url = 'https://binance-futures-leaderboard1.p.rapidapi.com/v1/getOtherPosition'
         querystring = {'encryptedUid':'1FB04E31362DEED9CAA1C7EF8A771B8A', 'tradeType':tradeType} #PERPETUAL 是 U 本位，DELIVERY是币本位
@@ -52,7 +63,89 @@ def retrieve_positions(tradeType):
         print('Error retrieving positions', e)   
         return []
 
+def store_update_time(session, timestamp, formatted_time):
+    try:
+        update_time_obj = session.query(TweetUpdateTime).first()
+        if update_time_obj:
+            update_time_obj.updateTimeStamp = timestamp
+            update_time_obj.updateTime = formatted_time
+        else:
+            new_update_time = TweetUpdateTime(updateTimeStamp=timestamp, updateTime=formatted_time)
+            session.add(new_update_time)
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        print(f"Error updating/inserting tweet update time: {e}")
+    finally:
+        session.close()
+
+def handle_new_tweets(data, session, last_update_timestamp):
+    new_tweets = [tweet for tweet in data["timeline"] if datetime.strptime(tweet['created_at'], '%a %b %d %H:%M:%S +0000 %Y').timestamp() > last_update_timestamp]
+    trade_updates_phrases = ['Trade Updates', 'Trade Update', 'trade update', 'trade updates', 'TRADE UPDATE', 'TRADE UPDATES']
+    position_update_phrases = ['Position Update', 'Position Updates', 'Portfolio Update', 'Portfolio Updates',
+                               'position update', 'position updates', 'portfolio update', 'portfolio updates',
+                               'POSITION UPDATE', 'POSITION UPDATES', 'PORTFOLIO UPDATE', 'PORTFOLIO UPDATES',
+                               'Positions Update', 'positions update', 'POSITIONS UPDATE']
+    
+    trade = [{
+        'tweet_id': tweet['tweet_id'],
+        'created_at': tweet['created_at'],
+        'text': tweet['text'],
+        'media': tweet['media']
+    } for tweet in data['timeline']
+              if any(phrase in tweet['text'] for phrase in trade_updates_phrases)
+              and not tweet['text'].startswith('RT @')
+              and 'media' in tweet]
+
+    positions = [{
+        'tweet_id': tweet['tweet_id'],
+        'created_at': tweet['created_at'],
+        'text': tweet['text'],
+        'media': tweet['media']
+    } for tweet in data['timeline']
+                  if any(phrase in tweet['text'] for phrase in position_update_phrases)
+                  and not tweet['text'].startswith('RT @')
+                  and 'media' in tweet]
+    #不为空时，图像识别
+    print(trade, positions)
+
+def retrieve_tweets():
+    session = Session()
+    try:
+        url = "https://twitter-api45.p.rapidapi.com/timeline.php"
+        querystring = {"screenname":"smartestmoney_","rest_id":"1641995815983140865"}
+        headers = {
+            "X-RapidAPI-Key": "9cb3faa370msh6ea8f37e65e4111p162897jsn1e9c3cc8f936",
+            "X-RapidAPI-Host": "twitter-api45.p.rapidapi.com"
+        }
+        response = requests.get(url, headers=headers, params=querystring)
+        if response.status_code == 200:
+            data = response.json()
+            if data:
+                created_at = data["timeline"][0]["created_at"]
+                tweet_time = datetime.strptime(created_at, '%a %b %d %H:%M:%S +0000 %Y')
+                timestamp = tweet_time.timestamp()
+                formatted_time = tweet_time.strftime('%Y-%m-%d %H:%M:%S')
+                update_time_obj = session.query(TweetUpdateTime).first()
+
+                if update_time_obj and update_time_obj.updateTimeStamp:
+                    if timestamp > update_time_obj.updateTimeStamp: #发现更新推文
+                        store_update_time(session, timestamp, formatted_time)
+                        handle_new_tweets(data, session, update_time_obj.updateTimeStamp)
+
+                else: # 首次运行或没有记录                   
+                    store_update_time(session, timestamp, formatted_time)
+
+                session.close()
+            else:
+                print("No data found in response.")
+                return []
+    except Exception as e:
+        print('Error retrieving tweets', e)
+        return []
+
 def get_latest_updateTimeStamp(symbol):
+    '''获取数据库里最新时间戳'''
     session = Session()
     try:
         result = session.query(Position.updateTimeStamp)\
@@ -64,6 +157,7 @@ def get_latest_updateTimeStamp(symbol):
         session.close()
 
 def get_all_symbols_and_latest_timestamps():
+    '''获取数据库里仓位的最新 symbol 和时间戳'''
     session = Session()
     try:
         all_positions = session.query(
@@ -94,12 +188,13 @@ def initial_insert_positions():
             markPrice=item['markPrice'], 
             pnl=item['pnl'], 
             roe=item['roe'], 
-            updateTime=str(item['updateTime']),  # 假设updateTime需要转换为字符串
+            updateTime=datetime(*item['updateTime'][:6]).strftime('%Y-%m-%d %H:%M:%S'),
             amount=item['amount'], 
             updateTimeStamp=item['updateTimeStamp'],
             yellow=item['yellow'], 
             tradeBefore=item['tradeBefore'], 
-            leverage=item['leverage']
+            leverage=item['leverage'],
+            source='leaderboard'
         )
         session.add(position)
     
@@ -123,12 +218,13 @@ def add_new_trades(new_symbols, api_data):
                     markPrice=item['markPrice'],
                     pnl=item['pnl'],
                     roe=item['roe'],
-                    updateTime=str(item['updateTime']),
+                    updateTime=datetime(*item['updateTime'][:6]).strftime('%Y-%m-%d %H:%M:%S'),
                     amount=item['amount'],
                     updateTimeStamp=item['updateTimeStamp'],
                     yellow=item['yellow'],
                     tradeBefore=item['tradeBefore'],
-                    leverage=item['leverage']
+                    leverage=item['leverage'],
+                    source='leaderboard'
                 )
                 session.add(new_position)
         session.commit()
@@ -222,10 +318,11 @@ def update_trade():
         update_existing_trades(updated_symbols, api_data)
 
 init_db()
-initial_insert_positions()
-while True:
-    update_trade()
-    time.sleep(7200)
+# initial_insert_positions()
+retrieve_tweets()
+# while True:
+#     update_trade()
+#     time.sleep(7200)
 
 
 
