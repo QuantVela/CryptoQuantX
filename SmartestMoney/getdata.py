@@ -4,11 +4,16 @@ from sqlalchemy import create_engine, Column, Integer, Float, String, Boolean, U
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime
 import time
+from dotenv import load_dotenv
+import os
 
 # API: https://rapidapi.com/DevNullZero/api/binance-futures-leaderboard1
 # 可参考项目
 # https://github.com/tpmmthomas/binance-copy-trade-bot/blob/14133d86434271aae20a1a06b9e926350c33213e/Binance/bparser.py
 # https://github.com/DogeIII/Binance-Leaderboard-CopyTrading/blob/main/bot.py
+
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 Base = declarative_base()
 engine = create_engine('sqlite:///SmartestMoney.db')
@@ -106,7 +111,7 @@ def handle_new_tweets(data, session, last_update_timestamp):
                   if any(phrase in tweet['text'] for phrase in position_update_phrases)
                   and not tweet['text'].startswith('RT @')
                   and 'media' in tweet]
-    #不为空时，图像识别
+    #不为空时，非gif的图像逐个识别
     print(trade, positions)
 
 def retrieve_tweets():
@@ -143,6 +148,39 @@ def retrieve_tweets():
     except Exception as e:
         print('Error retrieving tweets', e)
         return []
+
+def call_openai(prompt, url):
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {OPENAI_API_KEY}"
+    }
+
+    payload = {
+        "model": "gpt-4-vision-preview",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": url,
+                    },
+                ],
+            }
+        ],
+        "temperature": 0
+    }
+
+    response = requests.post(
+        "https://openai-proxy-self-ten.vercel.app/v1/chat/completions",
+        headers=headers,
+        data=json.dumps(payload)
+    )
+    response_json = response.json()
+    response_content = response_json['choices'][0]['message']['content']
+
+    return response_content
 
 def get_latest_updateTimeStamp(symbol):
     '''获取数据库里最新时间戳'''
