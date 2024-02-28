@@ -6,6 +6,12 @@ from datetime import datetime
 import time
 from dotenv import load_dotenv
 import os
+import logging
+import httpx
+from pydantic import BaseModel, field_validator, ValidationError, Field
+from pydantic import TypeAdapter
+from typing import List
+import re
 
 # API: https://rapidapi.com/DevNullZero/api/binance-futures-leaderboard1
 # 可参考项目
@@ -14,6 +20,7 @@ import os
 
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 Base = declarative_base()
 engine = create_engine('sqlite:///SmartestMoney.db')
@@ -43,6 +50,12 @@ class TweetUpdateTime(Base):
     updateTimeStamp = Column(Integer, unique=True)
     updateTime = Column(String)
 
+class TweetPosition(BaseModel):
+    symbol: str
+    size: float
+    entryPrice: float 
+    crossLeverage: str  
+    
 def init_db():
     Base.metadata.create_all(engine)
 
@@ -84,20 +97,116 @@ def store_update_time(session, timestamp, formatted_time):
     finally:
         session.close()
 
-def handle_new_tweets(data, session, last_update_timestamp):
+def call_openai(prompt, url):
+    timeout = httpx.Timeout(10.0, read=30.0)
+    transport = httpx.HTTPTransport(retries=5)
+    client = httpx.Client(transport=transport, timeout=timeout)
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {OPENAI_API_KEY}"
+    }
+
+    payload = {
+        "model": "gpt-4-vision-preview",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": url,
+                    },
+                ],
+            }
+        ],
+        "temperature": 0,
+        "max_tokens": 4000
+    }
+
+    try:
+        response = client.post(
+            "https://openai-proxy-self-ten.vercel.app/v1/chat/completions",
+            headers=headers,
+            content=json.dumps(payload)
+        )
+        response.raise_for_status()  # 这将抛出异常，如果响应状态码不是200
+
+        response_json = response.json()
+        if 'choices' in response_json and len(response_json['choices']) > 0:
+            response_content = response_json['choices'][0].get('message', {}).get('content', '')
+            return response_content
+        else:
+            logging.warning("Response JSON does not contain 'choices'.")
+            return None
+    except httpx.RequestError as e:
+        logging.error(f"Request failed: {e}")
+        return None
+    except Exception as e:
+        logging.error(f"An unexpected error occurred: {e}")
+        return None
+
+def validate_positions(json_data: str):
+    try:
+        # 如果以 ```json 开头
+        cleaned_data = json_data.strip()
+        if cleaned_data.startswith('```json'):
+            cleaned_data = re.sub(r'^```json\n|\n```$', '', json_data, flags=re.MULTILINE)
+        # 如果以 ```\n 开头
+        elif cleaned_data.startswith('```\n'):
+            cleaned_data = re.sub(r'^```\n|\n```$', '', json_data, flags=re.MULTILINE)
+        positions = json.loads(cleaned_data)  # 直接加载 JSON 数据
+        validated_positions = []
+        for pos in positions:
+            if 'crossLeverage' in pos and isinstance(pos['crossLeverage'], str):
+                # 如果 crossLeverage 是字符串且包含 'x'，则去除 'x' 并转换为整数
+                if 'x' in pos['crossLeverage']:
+                    pos['crossLeverage'] = int(pos['crossLeverage'].rstrip('x'))
+                else:  # 如果不包含 'x'，尝试直接转换为整数
+                    pos['crossLeverage'] = int(pos['crossLeverage'])
+            # 使用处理后的 pos 创建 TweetPosition 实例
+            validated_positions.append(TweetPosition(**pos))
+        
+        return validated_positions
+    except ValidationError as e:
+        print("Validation error:", e)
+    except json.JSONDecodeError:
+        print("Invalid JSON format.",json_data)
+    return None
+    
+def process_media_items(items, trade_prompt):
+    items_list = []
+
+    for item in items:
+        if item and 'media' in item and 'photo' in item['media']:
+            photo_urls = [photo["media_url_https"] for photo in item["media"]["photo"]]
+            
+            for url in photo_urls:
+                result = call_openai(trade_prompt, url)
+                validated_positions = validate_positions(result)
+                if validated_positions is None:
+                    continue 
+
+                positions_dict_list = [position.model_dump() for position in validated_positions]  
+                items_list.extend(positions_dict_list)
+
+    return json.dumps(items_list, indent=2)
+
+def handle_new_tweets(data, last_update_timestamp):
     new_tweets = [tweet for tweet in data["timeline"] if datetime.strptime(tweet['created_at'], '%a %b %d %H:%M:%S +0000 %Y').timestamp() > last_update_timestamp]
-    trade_updates_phrases = ['Trade Updates', 'Trade Update', 'trade update', 'trade updates', 'TRADE UPDATE', 'TRADE UPDATES']
+    trade_updates_phrases = ['Trade Updates', 'Trade Update', 'trade update', 'trade updates', 'TRADE UPDATE', 'TRADE UPDATES', 'Trades Update', 'TRADES UPDATE']
     position_update_phrases = ['Position Update', 'Position Updates', 'Portfolio Update', 'Portfolio Updates',
                                'position update', 'position updates', 'portfolio update', 'portfolio updates',
                                'POSITION UPDATE', 'POSITION UPDATES', 'PORTFOLIO UPDATE', 'PORTFOLIO UPDATES',
                                'Positions Update', 'positions update', 'POSITIONS UPDATE']
     
-    trade = [{
+    trades = [{
         'tweet_id': tweet['tweet_id'],
         'created_at': tweet['created_at'],
         'text': tweet['text'],
         'media': tweet['media']
-    } for tweet in data['timeline']
+    } for tweet in new_tweets
               if any(phrase in tweet['text'] for phrase in trade_updates_phrases)
               and not tweet['text'].startswith('RT @')
               and 'media' in tweet]
@@ -107,12 +216,30 @@ def handle_new_tweets(data, session, last_update_timestamp):
         'created_at': tweet['created_at'],
         'text': tweet['text'],
         'media': tweet['media']
-    } for tweet in data['timeline']
+    } for tweet in new_tweets
                   if any(phrase in tweet['text'] for phrase in position_update_phrases)
                   and not tweet['text'].startswith('RT @')
                   and 'media' in tweet]
-    #不为空时，非gif的图像逐个识别
-    print(trade, positions)
+    
+    trade_prompt = '''
+    Is the image a screenshot related to position information containing details of Size, Entry Price, and Cross? If yes, input the values into JSON. If not, return []
+
+    Always answer in the following JSON format:
+    [{"symbol": "<XXXUSDT in image>", "size": <Size number in image>, "entryPrice": <Entry Price number in image>, "crossLeverage": <Cross number in image>}]
+    or []
+    '''
+    positions_prompt = '''
+    Is the image a screenshot related to positions information containing details of Size, Entry Price, and Cross? If yes, input the values into JSON, Each object contains corresponding symbol info. If not, return []
+
+    Always answer in the following JSON format:
+    [{"symbol": "<XXXUSDT in image>", "size": <Size number in image>, "entryPrice": <Entry Price number in image>, "crossLeverage": <Cross number in image>}, {"symbol": "<another XXXUSDT in image>"...}]
+    or []
+    '''
+
+    trades_json = process_media_items(trades, trade_prompt)
+    positions_json = process_media_items(positions, positions_prompt)
+
+    return trades_json, positions_json
 
 def retrieve_tweets():
     session = Session()
@@ -136,7 +263,7 @@ def retrieve_tweets():
                 if update_time_obj and update_time_obj.updateTimeStamp:
                     if timestamp > update_time_obj.updateTimeStamp: #发现更新推文
                         store_update_time(session, timestamp, formatted_time)
-                        handle_new_tweets(data, session, update_time_obj.updateTimeStamp)
+                        handle_new_tweets(data, update_time_obj.updateTimeStamp)
 
                 else: # 首次运行或没有记录                   
                     store_update_time(session, timestamp, formatted_time)
@@ -148,39 +275,6 @@ def retrieve_tweets():
     except Exception as e:
         print('Error retrieving tweets', e)
         return []
-
-def call_openai(prompt, url):
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {OPENAI_API_KEY}"
-    }
-
-    payload = {
-        "model": "gpt-4-vision-preview",
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": url,
-                    },
-                ],
-            }
-        ],
-        "temperature": 0
-    }
-
-    response = requests.post(
-        "https://openai-proxy-self-ten.vercel.app/v1/chat/completions",
-        headers=headers,
-        data=json.dumps(payload)
-    )
-    response_json = response.json()
-    response_content = response_json['choices'][0]['message']['content']
-
-    return response_content
 
 def get_latest_updateTimeStamp(symbol):
     '''获取数据库里最新时间戳'''
