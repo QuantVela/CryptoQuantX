@@ -459,53 +459,70 @@ def update_existing_trades(data, updated_symbols):
     finally:
         session.close()
 
-async def open_positions(symbols_info):
+async def watch_order_book(symbol, queue, exchange_usdm):
+    while True:
+        try:
+            orderbook = await exchange_usdm.watch_order_book(symbol)
+            buy_price = orderbook['bids'][0][0]
+            await queue.put(buy_price)
+        except ccxt.BaseError as e:
+            logging.error(f"Error opening position for {symbol}: {e}")
+
+async def open_positions(symbols_info, queue, exchange_usdm):
     for item in symbols_info:
         symbol = item['symbol']
         stakeAmount = float(item['stakeAmount']) 
         leverage = int(item['leverage'])
         decimalPlaces = int(item['decimalPlaces'])
-        
-        while True:  
-            try:           
-                orderbook = await exchange_usdm.watch_order_book(symbol)
-                buy_price = orderbook['bids'][0][0]  # 获取买一价     
-                amount = stakeAmount * leverage / buy_price
-                adjusted_amount = round(amount, decimalPlaces)
-                if decimalPlaces == 0:
-                    adjusted_amount = int(adjusted_amount)
-                balance = await exchange_usdm.fetch_balance()
+                
+        try:           
+            buy_price = await queue.get()     
+            amount = stakeAmount * leverage / buy_price
+            adjusted_amount = round(amount, decimalPlaces)
+            if decimalPlaces == 0:
+                adjusted_amount = int(adjusted_amount)
+            balance = await exchange_usdm.fetch_balance()
 
-                available_balance = float(balance['info']['availableBalance'])
-                if available_balance < stakeAmount:
-                    logging.error(f"U 本位合约余额不足，无法下单: {symbol}")
-                    continue
-
-                setleverage = await exchange_usdm.set_leverage(leverage, symbol) 
-                logging.info(setleverage)
-                setmargin = await exchange_usdm.setMarginMode('cross', symbol)
-                logging.info(setmargin)
-                order = await exchange_usdm.createOrder(symbol, 'limit', 'buy', adjusted_amount, buy_price)  
-                        
-                order_status = await exchange_usdm.fetchOrder(order['id'], symbol)
-                remaining_amount = order_status['remaining']
-                logging.info(f"Order execution status: {order_status}")
-                if remaining_amount > 0:                                        
-                    new_buy_price = orderbook['bids'][0][0]
-                    logging.info(new_buy_price)
-                    logging.info(f"Modifying order {order['id']}: Remaining amount {remaining_amount}, New buy price {new_buy_price}")
-                    edited_order = await exchange_usdm.editOrder(order['id'], symbol, 'limit', 'buy', remaining_amount, new_buy_price)
-                    logging.info(f"Order modified: {edited_order}")
-                    await asyncio.sleep(2)  # 等待2秒再次检查
-                else:
-                    logging.info("Order fully filled.")
-                    break  # 订单完全成交，退出循环                
-
-            except ccxt.BaseError as e:
-                logging.error(f"Error opening position for {symbol}: {e}")
+            available_balance = float(balance['info']['availableBalance'])
+            if available_balance < stakeAmount:
+                logging.error(f"U 本位合约余额不足，无法下单: {symbol}")
                 continue
-            finally:
-                await exchange_usdm.close()  
+
+            setleverage = await exchange_usdm.set_leverage(leverage, symbol) 
+            logging.info(setleverage)
+            setmargin = await exchange_usdm.setMarginMode('cross', symbol)
+            logging.info(setmargin)
+            order = await exchange_usdm.createOrder(symbol, 'limit', 'buy', adjusted_amount, buy_price)  
+
+            await asyncio.wait_for(check_order_filled(exchange_usdm, order, symbol, buy_price), timeout=600)               
+
+        except ccxt.BaseError as e:
+            logging.error(f"Error opening position for {symbol}: {e}")
+            continue
+        
+        except asyncio.TimeoutError:
+            canceled = await exchange_usdm.cancelOrder(order['id'], symbol)
+            logging.info(f"Unfilled order canceled: {canceled}")
+            order_status = await exchange_usdm.fetchOrder(order['id'], symbol)
+            remaining_amount = order_status['remaining']
+            market_order = await exchange_usdm.createOrder(symbol, 'market', 'buy', remaining_amount)
+            logging.info(f"Market order placed for the remaining amount: {market_order}")
+
+async def check_order_filled(exchange_usdm, order, symbol, buy_price):
+    while True:         
+        order_status = await exchange_usdm.fetchOrder(order['id'], symbol)
+        remaining_amount = order_status['remaining']
+        logging.info(f"Order execution status: {order_status}")
+
+        if remaining_amount > 0:                                        
+            logging.info(buy_price)
+            logging.info(f"Modifying order {order['id']}: Remaining amount {remaining_amount}, New buy price {buy_price}")
+            edited_order = await exchange_usdm.editOrder(order['id'], symbol, 'limit', 'buy', remaining_amount, buy_price)
+            logging.info(f"Order modified: {edited_order}")
+            await asyncio.sleep(2)  # 等待2秒再次检查
+        else:
+            logging.info("Order fully filled.")
+            break  # 订单完全成交，退出循环 
 
 def process_symbols(data, source):
     if not data:
@@ -544,7 +561,23 @@ def update_trade():
     
 # res = fetch_symbol_info()
 # print(res)
+    
+# async def main():
+#     exchange_usdm = ccxtpro.binanceusdm({
+#         'apiKey': api_key,
+#         'secret': secret,
+#         'enableRateLimit': True,  
+#     })
+#     queue = asyncio.Queue()        
+#     watcher = watch_order_book(symbol[0]["symbol"], queue, exchange_usdm)   
+#     consumer = open_positions(symbol, queue, exchange_usdm)
+#     try:
+#         await asyncio.gather(watcher, consumer)
+#     finally:
+#         await exchange_usdm.close()
 
+# if __name__ == '__main__':
+#     asyncio.run(main())
 
 
 # scheduler = BackgroundScheduler()
