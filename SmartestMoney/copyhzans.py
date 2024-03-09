@@ -459,6 +459,57 @@ def update_existing_trades(data, updated_symbols):
     finally:
         session.close()
 
+def order_to_database(order_status, symbol, leverage, stakeAmount, capitalPercent):
+    session = Session()
+    if float(order_status['filled']) == 0:  # 跳过未成交订单
+        return
+    
+    existing_position = session.query(MyPosition).filter_by(symbol=symbol).first() # 检查数据库中是否已经存在这个symbol
+
+    if existing_position is None:
+        entryPrice = float(order_status['average'])
+        amount = float(order_status['filled'])
+    else:
+        amount = existing_position.amount + order_status['filled']
+        entryPrice = (existing_position.amount * existing_position.entryPrice + 
+                      float(order_status['average']) * float(order_status['filled'])) / (existing_position.amount + float(order_status['filled']))
+        stakeAmount += existing_position.stakeAmount
+        capitalPercent += existing_position.capitalPercent
+
+    totalCapital_row = session.query(MyPosition).order_by(MyPosition.updateTimeStamp.desc()).first()
+    totalCapital = totalCapital_row.totalCapital if totalCapital_row else INITIAL_CAPITAL
+
+    entryDate = datetime.strptime(order_status['datetime'], "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%Y-%m-%d %H:%M:%S")
+
+    position_data = {
+        'symbol': symbol,
+        'entryDate': entryDate,
+        'entryPrice': entryPrice,
+        'amount': amount,
+        'leverage': leverage,
+        'updateTime': entryDate,
+        'updateTimeStamp': order_status['timestamp'],
+        'stakeAmount': stakeAmount,
+        'capitalPercent': capitalPercent,
+        'totalCapital': totalCapital
+    }
+
+    try:
+        if existing_position:
+            for key, value in position_data.items():
+                setattr(existing_position, key, value)
+            session.merge(existing_position)
+        else:
+            new_position = MyPosition(**position_data)
+            session.add(new_position)
+        session.commit()    
+
+    except Exception as e:
+        session.rollback()
+        logging.error(f"Error during save order {order_status} to db: {e}")
+    finally:
+        session.close()
+
 async def watch_order_book(symbol, queue, exchange_usdm):
     while True:
         try:
@@ -474,6 +525,7 @@ async def open_positions(symbols_info, queue, exchange_usdm):
         stakeAmount = float(item['stakeAmount']) 
         leverage = int(item['leverage'])
         decimalPlaces = int(item['decimalPlaces'])
+        capitalPercent = float(item['capitalPercent'])
                 
         try:           
             buy_price = await queue.get()     
@@ -493,8 +545,9 @@ async def open_positions(symbols_info, queue, exchange_usdm):
             setmargin = await exchange_usdm.setMarginMode('cross', symbol)
             logging.info(setmargin)
             order = await exchange_usdm.createOrder(symbol, 'limit', 'buy', adjusted_amount, buy_price)  
+            order_to_database(order, symbol, leverage, stakeAmount, capitalPercent)
 
-            await asyncio.wait_for(check_order_filled(exchange_usdm, order, symbol, buy_price), timeout=600)               
+            await asyncio.wait_for(check_order_filled(exchange_usdm, order, symbol, buy_price, leverage, stakeAmount, capitalPercent), timeout=600)               
 
         except ccxt.BaseError as e:
             logging.error(f"Error opening position for {symbol}: {e}")
@@ -505,10 +558,11 @@ async def open_positions(symbols_info, queue, exchange_usdm):
             logging.info(f"Unfilled order canceled: {canceled}")
             order_status = await exchange_usdm.fetchOrder(order['id'], symbol)
             remaining_amount = order_status['remaining']
-            market_order = await exchange_usdm.createOrder(symbol, 'market', 'buy', remaining_amount)
+            market_order = await exchange_usdm.createOrder(symbol, 'market', 'buy', remaining_amount)  
             logging.info(f"Market order placed for the remaining amount: {market_order}")
+            order_to_database(market_order, symbol, leverage, stakeAmount, capitalPercent)
 
-async def check_order_filled(exchange_usdm, order, symbol, buy_price):
+async def check_order_filled(exchange_usdm, order, symbol, buy_price, leverage, stakeAmount, capitalPercent):
     while True:         
         order_status = await exchange_usdm.fetchOrder(order['id'], symbol)
         remaining_amount = order_status['remaining']
@@ -522,6 +576,8 @@ async def check_order_filled(exchange_usdm, order, symbol, buy_price):
             await asyncio.sleep(2)  # 等待2秒再次检查
         else:
             logging.info("Order fully filled.")
+            order_status = await exchange_usdm.fetchOrder(order['id'], symbol)
+            order_to_database(order_status, symbol, leverage, stakeAmount, capitalPercent)
             break  # 订单完全成交，退出循环 
 
 def process_symbols(data, source):
