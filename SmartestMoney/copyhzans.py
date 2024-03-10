@@ -1,6 +1,7 @@
 import json
 from sqlalchemy import create_engine, Column, Integer, Float, String, Boolean, DateTime, UniqueConstraint
 from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.sql import func
 from datetime import datetime
 import time
@@ -273,6 +274,7 @@ def calculate_positions():
     return position_df
 
 def get_symbol_info(symbols, position_df):
+    session = Session()
     symbols_info = []
     with open('BINANCE/symbol_info.json', 'r', encoding='utf-8') as file:
         data = json.load(file)    
@@ -282,14 +284,16 @@ def get_symbol_info(symbols, position_df):
             symbol_row = position_df[position_df['symbol'] == symbol].iloc[0]
             capital_percent = symbol_row['capitalPercent']
             leverage = symbol_row['leverage']
-            stake_amount = INITIAL_CAPITAL * capital_percent
+            totalCapital_row = session.query(MyPosition).order_by(MyPosition.updateTimeStamp.desc()).first()
+            totalCapital = totalCapital_row.totalCapital if totalCapital_row else INITIAL_CAPITAL
+            stake_amount = totalCapital * capital_percent 
             leverage = min(leverage, MAX_LEVERAGE)
             stepSize = next(
                 (f["stepSize"] for s in data["symbols"] if s["symbol"] == symbol for f in s["filters"] if f["filterType"] == 'LOT_SIZE'),
                 None)
 
             if stepSize is None:
-                fetched_data = fetch_symbol_info()  # 确保这个函数能返回有效的数据结构，与本地JSON相同
+                fetched_data = fetch_symbol_info()  
                 stepSize = next(
                     (f["stepSize"] for s in fetched_data["symbols"] if s["symbol"] == symbol for f in s["filters"] if f["filterType"] == 'LOT_SIZE'),
                     '1')
@@ -309,6 +313,27 @@ def get_symbol_info(symbols, position_df):
         else:
             logging.error(f"Symbol {symbol} not found in the provided DataFrame.")
         
+    return symbols_info
+
+def fetch_amounts_for_symbols(symbols):
+    session = Session()
+    symbols_info = []
+    
+    for symbol in symbols:
+        query_result = session.query(MyPosition).filter(MyPosition.symbol == symbol).first()
+        
+        if query_result:
+            symbols_info.append({
+                "symbol": symbol,
+                "amount": query_result.amount
+            })
+        else:
+            symbols_info.append({
+                "symbol": symbol,
+                "amount": None
+            })
+
+    session.close()
     return symbols_info
 
 def get_latest_updateTimeStamp(symbol):
@@ -459,9 +484,29 @@ def update_existing_trades(data, updated_symbols):
     finally:
         session.close()
 
+def update_sync(data):
+    session = Session()
+    for item in data:
+        symbol = item['symbol']
+
+        current_position = session.query(Position).filter_by(symbol=symbol).first()
+        if not current_position:
+            continue  # 如果数据库中没有这个symbol的记录，跳过    
+        current_position.markPrice = item.get('markPrice', current_position.markPrice)
+        current_position.pnl = item.get('pnl', current_position.pnl)
+        current_position.roe = item.get('roe', current_position.roe)        
+    try:
+        session.commit()
+    except SQLAlchemyError as e:
+        session.rollback()
+        logging.error(f"Error updating markPrice and pnl: {e}")
+    finally:
+        session.close()
+
 def order_to_database(order_status, symbol, leverage, stakeAmount, capitalPercent):
     session = Session()
     if float(order_status['filled']) == 0:  # 跳过未成交订单
+        session.close()
         return
     
     existing_position = session.query(MyPosition).filter_by(symbol=symbol).first() # 检查数据库中是否已经存在这个symbol
@@ -470,7 +515,7 @@ def order_to_database(order_status, symbol, leverage, stakeAmount, capitalPercen
         entryPrice = float(order_status['average'])
         amount = float(order_status['filled'])
     else:
-        amount = existing_position.amount + order_status['filled']
+        amount = existing_position.amount + float(order_status['filled'])
         entryPrice = (existing_position.amount * existing_position.entryPrice + 
                       float(order_status['average']) * float(order_status['filled'])) / (existing_position.amount + float(order_status['filled']))
         stakeAmount += existing_position.stakeAmount
@@ -510,16 +555,75 @@ def order_to_database(order_status, symbol, leverage, stakeAmount, capitalPercen
     finally:
         session.close()
 
-async def watch_order_book(symbol, queue, exchange_usdm):
+def close_order_to_database(order_status, symbol):
+    session = Session()
+    if float(order_status['filled']) == 0:
+        session.close()
+        return
+    
+    existing_position = session.query(MyPosition).filter_by(symbol=symbol).first()
+    totalCapital_row = session.query(MyPosition).order_by(MyPosition.updateTimeStamp.desc()).first()
+    totalCapital = totalCapital_row.totalCapital if totalCapital_row else INITIAL_CAPITAL
+    
+    if not existing_position.exitAmount:
+        exitPrice = float(order_status['average'])
+        exitAmount = float(order_status['filled'])
+    else:
+        exitAmount = existing_position.exitAmount + float(order_status['filled'])
+        exitPrice = (existing_position.exitAmount * existing_position.exitPrice + float(order_status['average']) * float(order_status['filled'])) / exitAmount
+    
+    PnL = singleTradeROI = PnLRatio = None
+
+    if exitAmount == existing_position.amount:
+        PnL = (exitPrice * exitAmount - existing_position.entryPrice * existing_position.amount - (exitPrice * exitAmount + existing_position.entryPrice * existing_position.amount) * 0.00018)
+        # to do: fees 是粗略估计，还差资金费用没计算在内
+        singleTradeROI = PnL / existing_position.stakeAmount if existing_position.stakeAmount else None
+        PnLRatio = PnL / totalCapital
+        totalCapital += PnL if PnL else 0
+
+    exitDate = datetime.strptime(order_status['datetime'], "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%Y-%m-%d %H:%M:%S")
+
+    try:    
+        if existing_position:
+            existing_position.updateTime = exitDate
+            existing_position.updateTimeStamp = order_status['timestamp']
+            existing_position.exitDate = exitDate
+            existing_position.exitPrice = exitPrice
+            existing_position.exitAmount = exitAmount
+            existing_position.PnL = PnL
+            existing_position.PnLRatio = PnLRatio
+            existing_position.singleTradeROI = singleTradeROI
+            existing_position.totalCapital = totalCapital
+            session.commit()
+    
+    except SQLAlchemyError as e:
+        session.rollback()
+        logging.error(f"Error during save order {order_status} to db: {e}")
+    finally:
+        session.close()
+
+async def watch_order_book(symbol, queue_buy_price, queue_sell_price, exchange_usdm):
+    last_buy_price = None
+    last_sell_price = None
+
     while True:
         try:
             orderbook = await exchange_usdm.watch_order_book(symbol)
-            buy_price = orderbook['bids'][0][0]
-            await queue.put(buy_price)
+            buy_price = orderbook['bids'][0][0]  
+            sell_price = orderbook['asks'][0][0] 
+            
+            if buy_price != last_buy_price:
+                await queue_buy_price.put(buy_price)
+                last_buy_price = buy_price  # 更新最后的买入价格
+
+            if sell_price != last_sell_price:
+                await queue_sell_price.put(sell_price)
+                last_sell_price = sell_price  # 更新最后的卖出价格
+                
         except ccxt.BaseError as e:
             logging.error(f"Error opening position for {symbol}: {e}")
 
-async def open_positions(symbols_info, queue, exchange_usdm):
+async def entry_positions(symbols_info, queue_buy_price, exchange_usdm):
     for item in symbols_info:
         symbol = item['symbol']
         stakeAmount = float(item['stakeAmount']) 
@@ -528,7 +632,7 @@ async def open_positions(symbols_info, queue, exchange_usdm):
         capitalPercent = float(item['capitalPercent'])
                 
         try:           
-            buy_price = await queue.get()     
+            buy_price = await queue_buy_price.get()    
             amount = stakeAmount * leverage / buy_price
             adjusted_amount = round(amount, decimalPlaces)
             if decimalPlaces == 0:
@@ -576,9 +680,48 @@ async def check_order_filled(exchange_usdm, order, symbol, buy_price, leverage, 
             await asyncio.sleep(2)  # 等待2秒再次检查
         else:
             logging.info("Order fully filled.")
-            order_status = await exchange_usdm.fetchOrder(order['id'], symbol)
             order_to_database(order_status, symbol, leverage, stakeAmount, capitalPercent)
             break  # 订单完全成交，退出循环 
+
+async def exit_positions(symbols_info, queue_sell_price, exchange_usdm):
+    for item in symbols_info:
+        symbol = item['symbol']
+        amount = item['amount']
+
+        try:
+            sell_price = await queue_sell_price.get()  
+            # setmode = await exchange_usdm.setPositionMode(False, symbol)
+            order = await exchange_usdm.createOrder(symbol, 'limit', 'sell', amount, sell_price, {'reduceOnly': 'true'}) 
+
+            await asyncio.wait_for(check_close_order_filled(exchange_usdm, order, symbol, sell_price), timeout=600) 
+
+        except ccxt.BaseError as e:
+            logging.error(f"Error closeing position for {symbol}: {e}")
+            continue
+        
+        except asyncio.TimeoutError:
+            canceled = await exchange_usdm.cancelOrder(order['id'], symbol)
+            logging.info(f"Unfilled order canceled: {canceled}")
+            order_status = await exchange_usdm.fetchOrder(order['id'], symbol)
+            remaining_amount = order_status['remaining']
+            market_order = await exchange_usdm.createOrder(symbol, 'market', 'sell', remaining_amount)  
+            logging.info(f"Market order placed for the remaining amount: {market_order}")
+
+async def check_close_order_filled(exchange_usdm, order, symbol, sell_price):
+    while True:         
+        order_status = await exchange_usdm.fetchOrder(order['id'], symbol)
+        remaining_amount = order_status['remaining']
+        logging.info(f"Order execution status: {order_status}")
+
+        if remaining_amount > 0:                                        
+            logging.info(sell_price)
+            logging.info(f"Modifying order {order['id']}: Remaining amount {remaining_amount}, New sell price {sell_price}")
+            edited_order = await exchange_usdm.editOrder(order['id'], symbol, 'limit', 'sell', remaining_amount, sell_price)
+            logging.info(f"Order modified: {edited_order}")
+            await asyncio.sleep(2)  # 等待2秒再次检查
+        else:
+            logging.info("Order fully filled.")
+            break  # 订单完全成交，退出循环            
 
 def process_symbols(data, source):
     if not data:
@@ -601,6 +744,7 @@ def process_symbols(data, source):
         close_existing_trades(closed_symbols)
     if updated_symbols:
         update_existing_trades(updated_symbols, data)
+    update_sync(data)
 
 def update_trade():
     perpetual_positions = retrieve_positions(tradeType='PERPETUAL')
@@ -624,13 +768,14 @@ def update_trade():
 #         'secret': secret,
 #         'enableRateLimit': True,  
 #     })
-#     queue = asyncio.Queue()        
-#     watcher = watch_order_book(symbol[0]["symbol"], queue, exchange_usdm)   
-#     consumer = open_positions(symbol, queue, exchange_usdm)
-#     try:
-#         await asyncio.gather(watcher, consumer)
-#     finally:
-#         await exchange_usdm.close()
+#     queue_buy_price = asyncio.Queue()  
+#     queue_sell_price = asyncio.Queue()      
+    # watcher = watch_order_book(symbol[0]["symbol"], queue_buy_price, queue_sell_price, exchange_usdm)   
+    # buyer = entry_positions(symbol, queue_buy_price, exchange_usdm)
+    # try:
+    #     await asyncio.gather(watcher, buyer)
+    # finally:
+    #     await exchange_usdm.close()
 
 # if __name__ == '__main__':
 #     asyncio.run(main())
