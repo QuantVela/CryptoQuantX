@@ -211,6 +211,29 @@ def fetch_symbol_info():
         json.dump(data, f, ensure_ascii=False, indent=4) 
     return data
 
+def get_symbols_percent(symbol):
+    session = Session()  
+    symbol_percent = []
+
+    try:
+        current_position = session.query(Position).filter(Position.symbol == symbol).first()
+
+        if current_position is not None:
+            symbol_info = {
+                'symbol': symbol,
+                'before_capital_percent': current_position.capitalPercent
+            }
+            symbol_percent.append(symbol_info)
+        else:
+            logging.info(f"No position found for {symbol}")
+            symbol_percent.append({'symbol': symbol, 'before_capital_percent': 0})
+    except Exception as e:
+        logging.error(f"Error while fetching symbols info: {e}")
+    finally:
+        session.close()  # 确保在结束时关闭数据库会话
+
+    return symbol_percent
+
 def calculate_positions():
     session = Session()
     # 获取currentCapital
@@ -273,16 +296,19 @@ def calculate_positions():
     session.close()
     return position_df
 
-def get_symbol_info(symbols, position_df):
+def get_symbol_info(symbols_info, position_df):
     session = Session()
-    symbols_info = []
+    updated_symbols_info = []
     with open('BINANCE/symbol_info.json', 'r', encoding='utf-8') as file:
         data = json.load(file)    
 
-    for symbol in symbols:
+    for symbol_info in symbols_info:
+        symbol = symbol_info['symbol']
+        before_capital_percent = symbol_info['before_capital_percent']
+
         if symbol in position_df['symbol'].values:
             symbol_row = position_df[position_df['symbol'] == symbol].iloc[0]
-            capital_percent = symbol_row['capitalPercent']
+            capital_percent = symbol_row['capitalPercent'] - before_capital_percent
             leverage = symbol_row['leverage']
             totalCapital_row = session.query(MyPosition).order_by(MyPosition.updateTimeStamp.desc()).first()
             totalCapital = totalCapital_row.totalCapital if totalCapital_row else INITIAL_CAPITAL
@@ -303,7 +329,7 @@ def get_symbol_info(symbols, position_df):
             else:
                 decimal_places = 0 
 
-            symbols_info.append({
+            updated_symbols_info.append({
                 "symbol": symbol,
                 "capitalPercent": capital_percent,
                 "leverage": leverage,
@@ -313,7 +339,7 @@ def get_symbol_info(symbols, position_df):
         else:
             logging.error(f"Symbol {symbol} not found in the provided DataFrame.")
         
-    return symbols_info
+    return updated_symbols_info
 
 def fetch_amounts_for_symbols(symbols):
     session = Session()
@@ -422,7 +448,7 @@ def add_new_trades(new_symbols, data, source):
         session.commit()
     except Exception as e:
         session.rollback()
-        logging.error(f"Error adding new trades: {e}")
+        logging.error(f"Error adding new trades{new_symbols}: {e}")
     finally:
         session.close()
 
@@ -435,7 +461,60 @@ def close_existing_trades(closed_symbols):
         session.commit()
     except Exception as e:
         session.rollback()
-        logging.error(f"Error closing existing trades: {e}")
+        logging.error(f"Error closing existing trades{closed_symbols}: {e}")
+    finally:
+        session.close()
+
+def add_position(symbol, item):
+    session = Session()
+    logging.info(f"⬆️ Increasing position for {symbol}")
+    current_position = session.query(Position).filter(Position.symbol == symbol).first()
+    if current_position:
+        current_position.amount = item['amount']
+        current_position.updateTime = item['updateTime']
+        current_position.updateTimeStamp = item['updateTimeStamp']
+    try:
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        logging.error(f"Error adding position {symbol}: {e}")
+    finally:
+        session.close()
+
+def reduce_position(symbol, item):
+    session = Session()
+    logging.info(f"⬇️ Decreasing position for {symbol}")
+    current_position = session.query(Position).filter(Position.symbol == symbol).first()
+    if current_position:
+        current_position.amount = item['amount']
+        current_position.updateTime = item['updateTime']
+        current_position.updateTimeStamp = item['updateTimeStamp']
+    try:
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        logging.error(f"Error reducing position {symbol}: {e}")
+    finally:
+        session.close()
+
+def change_leverage(symbol, item):
+    session = Session()
+    if 'leverage' in item and item['leverage'] > current_position.leverage:
+        logging.info(f"🔺 Increased leverage for {symbol}")
+
+    elif 'leverage' in item and item['leverage'] < current_position.leverage:
+        logging.info(f"🔻 Decreased leverage for {symbol}")
+
+    current_position = session.query(Position).filter(Position.symbol == symbol).first()
+    if current_position:
+        current_position.leverage = item['leverage']
+        current_position.updateTime = item['updateTime']
+        current_position.updateTimeStamp = item['updateTimeStamp']
+    try:
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        logging.error(f"Error changing leverage {symbol}: {e}")
     finally:
         session.close()
 
@@ -623,48 +702,47 @@ async def watch_order_book(symbol, queue_buy_price, queue_sell_price, exchange_u
         except ccxt.BaseError as e:
             logging.error(f"Error opening position for {symbol}: {e}")
 
-async def entry_positions(symbols_info, queue_buy_price, exchange_usdm):
-    for item in symbols_info:
-        symbol = item['symbol']
-        stakeAmount = float(item['stakeAmount']) 
-        leverage = int(item['leverage'])
-        decimalPlaces = int(item['decimalPlaces'])
-        capitalPercent = float(item['capitalPercent'])
+async def entry_position(symbol_info, queue_buy_price, exchange_usdm):
+    symbol = symbol_info['symbol']
+    stakeAmount = float(symbol_info['stakeAmount'])
+    leverage = int(symbol_info['leverage'])
+    decimalPlaces = int(symbol_info['decimalPlaces'])
+    capitalPercent = float(symbol_info['capitalPercent'])
                 
-        try:           
-            buy_price = await queue_buy_price.get()    
-            amount = stakeAmount * leverage / buy_price
-            adjusted_amount = round(amount, decimalPlaces)
-            if decimalPlaces == 0:
-                adjusted_amount = int(adjusted_amount)
-            balance = await exchange_usdm.fetch_balance()
+    try:           
+        buy_price = await queue_buy_price.get()    
+        amount = stakeAmount * leverage / buy_price
+        adjusted_amount = round(amount, decimalPlaces)
+        if decimalPlaces == 0:
+            adjusted_amount = int(adjusted_amount)
 
-            available_balance = float(balance['info']['availableBalance'])
-            if available_balance < stakeAmount:
-                logging.error(f"U 本位合约余额不足，无法下单: {symbol}")
-                continue
+        balance = await exchange_usdm.fetch_balance()
+        available_balance = float(balance['info']['availableBalance'])
+        if available_balance < stakeAmount:
+            logging.error(f"U 本位合约余额不足，无法下单: {symbol}")
+            return
 
-            setleverage = await exchange_usdm.set_leverage(leverage, symbol) 
-            logging.info(setleverage)
-            setmargin = await exchange_usdm.setMarginMode('cross', symbol)
-            logging.info(setmargin)
-            order = await exchange_usdm.createOrder(symbol, 'limit', 'buy', adjusted_amount, buy_price)  
-            order_to_database(order, symbol, leverage, stakeAmount, capitalPercent)
+        setleverage = await exchange_usdm.set_leverage(leverage, symbol) 
+        logging.info(f"Set leverage: {setleverage}")
+        setmargin = await exchange_usdm.setMarginMode('cross', symbol)
+        logging.info(f"Set margin mode: {setmargin}")
+        order = await exchange_usdm.createOrder(symbol, 'limit', 'buy', adjusted_amount, buy_price)  
+        order_to_database(order, symbol, leverage, stakeAmount, capitalPercent)
 
-            await asyncio.wait_for(check_order_filled(exchange_usdm, order, symbol, buy_price, leverage, stakeAmount, capitalPercent), timeout=600)               
+        await asyncio.wait_for(check_order_filled(exchange_usdm, order, symbol, buy_price, leverage, stakeAmount, capitalPercent), timeout=600)               
 
-        except ccxt.BaseError as e:
-            logging.error(f"Error opening position for {symbol}: {e}")
-            continue
-        
-        except asyncio.TimeoutError:
-            canceled = await exchange_usdm.cancelOrder(order['id'], symbol)
-            logging.info(f"Unfilled order canceled: {canceled}")
-            order_status = await exchange_usdm.fetchOrder(order['id'], symbol)
-            remaining_amount = order_status['remaining']
-            market_order = await exchange_usdm.createOrder(symbol, 'market', 'buy', remaining_amount)  
-            logging.info(f"Market order placed for the remaining amount: {market_order}")
-            order_to_database(market_order, symbol, leverage, stakeAmount, capitalPercent)
+    except ccxt.BaseError as e:
+        logging.error(f"Error opening position for {symbol}: {e}")
+        return
+    
+    except asyncio.TimeoutError:
+        canceled = await exchange_usdm.cancelOrder(order['id'], symbol)
+        logging.info(f"Unfilled order canceled: {canceled}")
+        order_status = await exchange_usdm.fetchOrder(order['id'], symbol)
+        remaining_amount = order_status['remaining']
+        market_order = await exchange_usdm.createOrder(symbol, 'market', 'buy', remaining_amount)  
+        logging.info(f"Market order placed for the remaining amount: {market_order}")
+        order_to_database(market_order, symbol, leverage, stakeAmount, capitalPercent)
 
 async def check_order_filled(exchange_usdm, order, symbol, buy_price, leverage, stakeAmount, capitalPercent):
     while True:         
@@ -683,29 +761,28 @@ async def check_order_filled(exchange_usdm, order, symbol, buy_price, leverage, 
             order_to_database(order_status, symbol, leverage, stakeAmount, capitalPercent)
             break  # 订单完全成交，退出循环 
 
-async def exit_positions(symbols_info, queue_sell_price, exchange_usdm):
-    for item in symbols_info:
-        symbol = item['symbol']
-        amount = item['amount']
+async def exit_position(symbol_info, queue_sell_price, exchange_usdm):
+    symbol = symbol_info['symbol']
+    amount = symbol_info['amount']
 
-        try:
-            sell_price = await queue_sell_price.get()  
-            # setmode = await exchange_usdm.setPositionMode(False, symbol)
-            order = await exchange_usdm.createOrder(symbol, 'limit', 'sell', amount, sell_price, {'reduceOnly': 'true'}) 
+    try:
+        sell_price = await queue_sell_price.get()  
+        # setmode = await exchange_usdm.setPositionMode(False, symbol)
+        order = await exchange_usdm.createOrder(symbol, 'limit', 'sell', amount, sell_price, {'reduceOnly': 'true'}) 
 
-            await asyncio.wait_for(check_close_order_filled(exchange_usdm, order, symbol, sell_price), timeout=600) 
+        await asyncio.wait_for(check_close_order_filled(exchange_usdm, order, symbol, sell_price), timeout=600) 
 
-        except ccxt.BaseError as e:
-            logging.error(f"Error closeing position for {symbol}: {e}")
-            continue
-        
-        except asyncio.TimeoutError:
-            canceled = await exchange_usdm.cancelOrder(order['id'], symbol)
-            logging.info(f"Unfilled order canceled: {canceled}")
-            order_status = await exchange_usdm.fetchOrder(order['id'], symbol)
-            remaining_amount = order_status['remaining']
-            market_order = await exchange_usdm.createOrder(symbol, 'market', 'sell', remaining_amount)  
-            logging.info(f"Market order placed for the remaining amount: {market_order}")
+    except ccxt.BaseError as e:
+        logging.error(f"Error closeing position for {symbol}: {e}")
+        return
+    
+    except asyncio.TimeoutError:
+        canceled = await exchange_usdm.cancelOrder(order['id'], symbol)
+        logging.info(f"Unfilled order canceled: {canceled}")
+        order_status = await exchange_usdm.fetchOrder(order['id'], symbol)
+        remaining_amount = order_status['remaining']
+        market_order = await exchange_usdm.createOrder(symbol, 'market', 'sell', remaining_amount)  
+        logging.info(f"Market order placed for the remaining amount: {market_order}")
 
 async def check_close_order_filled(exchange_usdm, order, symbol, sell_price):
     while True:         
@@ -723,11 +800,15 @@ async def check_close_order_filled(exchange_usdm, order, symbol, sell_price):
             logging.info("Order fully filled.")
             break  # 订单完全成交，退出循环            
 
-def process_symbols(data, source):
-    if not data:
+async def update_trade():
+    perpetual_positions = retrieve_positions(tradeType='PERPETUAL')
+    delivery_positions = retrieve_positions(tradeType='DELIVERY')
+    api_data = perpetual_positions + delivery_positions
+
+    if not api_data:
         return
     db_symbols_timestamps = get_all_symbols_and_latest_timestamps()
-    new_symbols_timestamps = {item['symbol']: item['updateTimeStamp'] for item in data}
+    new_symbols_timestamps = {item['symbol']: item['updateTimeStamp'] for item in api_data}
     
     # 比较数据库和API/tweet的symbol，确定新增和减少的symbol
     new_symbols = set(new_symbols_timestamps.keys()) - set(db_symbols_timestamps.keys())
@@ -739,55 +820,72 @@ def process_symbols(data, source):
     
     # 根据情况调用相应函数
     if new_symbols:
-        add_new_trades(new_symbols, data, source=source)
+        symbols_info = [{'symbol': symbol, 'before_capital_percent': 0} for symbol in new_symbols]
+        add_new_trades(new_symbols, api_data, source='leaderboard')
+        position_df = calculate_positions()
+        trade_symbols_info = get_symbol_info(symbols_info, position_df)
+        await trade(trade_symbols_info, 'entry')
+
     if closed_symbols:
         close_existing_trades(closed_symbols)
+        symbols_info = fetch_amounts_for_symbols()
+        await trade(trade_symbols_info, 'exit')
+
     if updated_symbols:
-        update_existing_trades(updated_symbols, data)
-    update_sync(data)
+        session = Session()
+        for symbol in updated_symbols:  # 遍历需要更新的symbols
+            item = next((item for item in api_data if item['symbol'] == symbol), None)
+            current_position = session.query(Position).filter(Position.symbol == symbol).first()
+            if item['amount'] > current_position.amount:
+                symbol_info = get_symbols_percent(symbol)
+                add_position(symbol, item)
+                position_df = calculate_positions()
+                trade_symbols_info = get_symbol_info(symbol_info, position_df)
+                await trade(trade_symbols_info, 'entry')
+            elif item['amount'] < current_position.amount:
+                symbol_info = get_symbols_percent(symbol)
+                reduce_position(symbol, item)
+            elif item['leverage'] != current_position.leverage:
+                change_leverage(symbol, item)
 
-def update_trade():
-    perpetual_positions = retrieve_positions(tradeType='PERPETUAL')
-    delivery_positions = retrieve_positions(tradeType='DELIVERY')
-    api_data = perpetual_positions + delivery_positions
-    process_symbols(api_data, 'leaderboard')
+    update_sync(api_data)
 
-# init_db()
-# initial_insert_positions()
-# res = retrieve_performance()
-# print(res)
-# df_result = calculate_positions() #可以每当仓位更新时调一次
-# print(df_result)
+async def trade(trade_symbols_info, action):
+    exchange_usdm = ccxtpro.binanceusdm({
+        'apiKey': api_key,
+        'secret': secret,
+        'enableRateLimit': True,  
+    })
+    tasks = []
+    queue_buy_price = asyncio.Queue()  
+    queue_sell_price = asyncio.Queue()    
+    for trade_symbol_info in trade_symbols_info:
+        symbol = trade_symbol_info['symbol']
+        watcher = asyncio.create_task(watch_order_book(symbol, queue_buy_price, queue_sell_price, exchange_usdm))   
+        tasks.append(watcher)
+
+        if action == 'entry':
+            trader = asyncio.create_task(entry_position(trade_symbol_info, queue_buy_price, exchange_usdm))
+        elif action == 'exit':
+            trader = asyncio.create_task(exit_position(trade_symbol_info, queue_sell_price, exchange_usdm))    
+        tasks.append(trader)
     
-# res = fetch_symbol_info()
-# print(res)
-    
-# async def main():
-#     exchange_usdm = ccxtpro.binanceusdm({
-#         'apiKey': api_key,
-#         'secret': secret,
-#         'enableRateLimit': True,  
-#     })
-#     queue_buy_price = asyncio.Queue()  
-#     queue_sell_price = asyncio.Queue()      
-    # watcher = watch_order_book(symbol[0]["symbol"], queue_buy_price, queue_sell_price, exchange_usdm)   
-    # buyer = entry_positions(symbol, queue_buy_price, exchange_usdm)
-    # try:
-    #     await asyncio.gather(watcher, buyer)
-    # finally:
-    #     await exchange_usdm.close()
+    await asyncio.gather(*tasks)
+    await exchange_usdm.close()
 
-# if __name__ == '__main__':
-#     asyncio.run(main())
+if __name__ == '__main__':
+    init_db()
+    initial_insert_positions()
+    retrieve_performance()
+    calculate_positions() #可以每当仓位更新时调一次
 
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(func=update_trade, trigger='interval', minutes=1, next_run_time=datetime.now())
+    scheduler.start()
 
-# scheduler = BackgroundScheduler()
-# scheduler.add_job(func=update_trade, trigger='interval', minutes=1, next_run_time=datetime.now())
-# scheduler.start()
-
-# # 保持主线程运行，防止程序结束
-# try:
-#     while True:
-#         time.sleep(1)
-# except (KeyboardInterrupt, SystemExit):
-#     scheduler.shutdown()
+    # 保持主线程运行，防止程序结束
+    try:
+        while True:
+            time.sleep(1)
+    except (KeyboardInterrupt, SystemExit):
+        scheduler.shutdown()
